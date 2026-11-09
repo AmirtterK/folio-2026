@@ -10,18 +10,18 @@ import type { CarPose } from "@/components/ToyCarSmoke";
 
 /** Starting grid position on Monza's Rettifilo Tribune (Main Straight heading West) */
 export const TRACK_START = {
-  x: 13.08,
-  z: 41.27,
+  x: 25.0,
+  z: 45.0,
   y: 0.02,
   yaw: -Math.PI / 2, // Facing West along -x towards Turn 1 (Variante del Rettifilo)
 };
 
 /** Entire Monza circuit driving bounds */
 export const TRACK_BOUNDS = {
-  minX: -105,
-  maxX: 105,
-  minZ: -60,
-  maxZ: 60,
+  minX: -110,
+  maxX: 125,
+  minZ: -90,
+  maxZ: 70,
 };
 
 export const flatGround = () => 0.02;
@@ -118,78 +118,79 @@ function createTrackTexture(): THREE.CanvasTexture {
 export function buildMonzaGeometry() {
   // Key control waypoints representing the iconic Autodromo Nazionale Monza corners (500gt3.com layout)
   const points = [
-    // 1. Rettifilo Tribune (Main Straight heading West)
-    new THREE.Vector3(13.08, 0.02, 41.27),
-    new THREE.Vector3(4.90, 0.02, 41.27),
-    new THREE.Vector3(-4.09, 0.02, 41.27),
-    new THREE.Vector3(-13.08, 0.02, 41.27),
+    // 1. Main Rettifilo Straight (heading West / -X)
+    new THREE.Vector3(25.0, 0.02, 45.0), // START / FINISH LINE
+    new THREE.Vector3(10.0, 0.02, 45.0),
+    new THREE.Vector3(-5.0, 0.02, 45.0),
+    new THREE.Vector3(-18.0, 0.02, 45.0),
 
-    // 2. Turns 1 & 2: Variante del Rettifilo Chicane
-    new THREE.Vector3(-21.25, 0.02, 38.82),
-    new THREE.Vector3(-30.24, 0.02, 41.27),
-    new THREE.Vector3(-39.23, 0.02, 42.09),
-    new THREE.Vector3(-48.22, 0.02, 41.27),
+    // 2. Variante del Rettifilo (Turns 1 & 2: Right-Left Chicane)
+    new THREE.Vector3(-26.0, 0.02, 43.0),
+    new THREE.Vector3(-30.0, 0.02, 34.0), // Turn 1 apex (right flick)
+    new THREE.Vector3(-36.0, 0.02, 35.0),
+    new THREE.Vector3(-40.0, 0.02, 45.0), // Turn 2 exit (left flick back to main line)
 
-    // 3. Turn 3: Curva Grande (Biassono) sweeping up towards North-West
-    new THREE.Vector3(-56.39, 0.02, 38.00),
-    new THREE.Vector3(-64.57, 0.02, 29.83),
-    new THREE.Vector3(-67.84, 0.02, 20.84),
-    new THREE.Vector3(-69.47, 0.02, 12.67),
-    new THREE.Vector3(-71.11, 0.02, 3.68),
-    new THREE.Vector3(-71.92, 0.02, -5.31),
+    // 3. Curva Grande / Biassono (Turn 3: Sweeping fast right)
+    new THREE.Vector3(-50.0, 0.02, 45.0),
+    new THREE.Vector3(-62.0, 0.02, 42.0),
+    new THREE.Vector3(-72.0, 0.02, 32.0),
+    new THREE.Vector3(-78.0, 0.02, 18.0),
+    new THREE.Vector3(-80.0, 0.02, 2.0),
+    new THREE.Vector3(-80.0, 0.02, -14.0),
 
-    // 4. Turns 4 & 5: Variante della Roggia Chicane
-    new THREE.Vector3(-76.83, 0.02, -13.49),
-    new THREE.Vector3(-80.91, 0.02, -21.66),
-    new THREE.Vector3(-85.00, 0.02, -30.65),
+    // 4. Straight to Roggia
+    new THREE.Vector3(-80.0, 0.02, -28.0),
 
-    // 5. Turns 6 & 7: Curve di Lesmo 1 & 2 (Top Left)
-    new THREE.Vector3(-81.73, 0.02, -38.82),
-    new THREE.Vector3(-72.74, 0.02, -40.46),
-    new THREE.Vector3(-64.57, 0.02, -42.09),
+    // 5. Variante della Roggia (Turns 4 & 5: Left-Right Chicane)
+    new THREE.Vector3(-82.0, 0.02, -36.0),
+    new THREE.Vector3(-89.0, 0.02, -42.0), // Turn 4 apex (left flick)
+    new THREE.Vector3(-85.0, 0.02, -48.0),
+    new THREE.Vector3(-78.0, 0.02, -52.0), // Turn 5 exit (right flick)
 
-    // 6. Curva del Serraglio & Straight towards Ascari (sloping down-right)
-    new THREE.Vector3(-57.21, 0.02, -37.19),
-    new THREE.Vector3(-51.49, 0.02, -29.01),
-    new THREE.Vector3(-46.59, 0.02, -20.84),
-    new THREE.Vector3(-39.23, 0.02, -13.49),
-    new THREE.Vector3(-33.51, 0.02, -8.58),
-    new THREE.Vector3(-25.34, 0.02, -0.41),
+    // 6. Curva di Lesmo 1 (Turn 6: 90 deg right)
+    new THREE.Vector3(-76.0, 0.02, -60.0),
+    new THREE.Vector3(-70.0, 0.02, -66.0),
+    new THREE.Vector3(-60.0, 0.02, -68.0),
 
-    // 7. Turns 8, 9 & 10: Variante Ascari
-    new THREE.Vector3(-17.98, 0.02, 6.13),
-    new THREE.Vector3(-12.26, 0.02, 11.03),
-    new THREE.Vector3(-3.27, 0.02, 15.94),
-    new THREE.Vector3(4.90, 0.02, 18.39),
+    // 7. Curva di Lesmo 2 (Turn 7: tight right into back run)
+    new THREE.Vector3(-48.0, 0.02, -68.0),
+    new THREE.Vector3(-38.0, 0.02, -63.0),
+    new THREE.Vector3(-32.0, 0.02, -54.0),
 
-    // 8. Rettifilo Posteriore (Back Straight heading East)
-    new THREE.Vector3(13.89, 0.02, 20.02),
-    new THREE.Vector3(22.88, 0.02, 20.02),
-    new THREE.Vector3(31.88, 0.02, 20.02),
-    new THREE.Vector3(40.05, 0.02, 20.02),
-    new THREE.Vector3(49.04, 0.02, 20.02),
-    new THREE.Vector3(58.03, 0.02, 20.02),
-    new THREE.Vector3(67.02, 0.02, 20.02),
-    new THREE.Vector3(75.19, 0.02, 20.02),
+    // 8. Curva del Serraglio & Diagonal run towards Ascari
+    new THREE.Vector3(-24.0, 0.02, -42.0),
+    new THREE.Vector3(-14.0, 0.02, -28.0),
+    new THREE.Vector3(-4.0, 0.02, -14.0),
+    new THREE.Vector3(6.0, 0.02, 0.0),
 
-    // 9. Turn 11: Curva Parabolica (Alboreto - 180° opening right carousel)
-    new THREE.Vector3(84.18, 0.02, 21.66),
-    new THREE.Vector3(85.00, 0.02, 30.65),
-    new THREE.Vector3(77.64, 0.02, 36.37),
-    new THREE.Vector3(68.65, 0.02, 39.64),
+    // 9. Variante Ascari (Turns 8, 9 & 10: fast Left-Right-Left chicane)
+    new THREE.Vector3(13.0, 0.02, 8.0),
+    new THREE.Vector3(18.0, 0.02, 2.0), // Turn 8 (left entry)
+    new THREE.Vector3(25.0, 0.02, 5.0), // Turn 9 (right flick)
+    new THREE.Vector3(31.0, 0.02, 12.0), // Turn 10 (left exit onto back straight)
 
-    // 10. Main Straight run back to Start / Finish line
-    new THREE.Vector3(59.66, 0.02, 40.46),
-    new THREE.Vector3(50.67, 0.02, 40.46),
-    new THREE.Vector3(42.50, 0.02, 40.46),
-    new THREE.Vector3(33.51, 0.02, 40.46),
-    new THREE.Vector3(22.88, 0.02, 41.27),
-    new THREE.Vector3(13.89, 0.02, 41.27),
+    // 10. Rettifilo Posteriore (Back Straight heading East / +X)
+    new THREE.Vector3(42.0, 0.02, 13.0),
+    new THREE.Vector3(56.0, 0.02, 13.0),
+    new THREE.Vector3(70.0, 0.02, 13.0),
+    new THREE.Vector3(82.0, 0.02, 13.0),
+
+    // 11. Curva Parabolica / Alboreto (Turn 11: 180 deg opening right carousel)
+    new THREE.Vector3(93.0, 0.02, 16.0),
+    new THREE.Vector3(101.0, 0.02, 23.0),
+    new THREE.Vector3(103.0, 0.02, 32.0),
+    new THREE.Vector3(98.0, 0.02, 40.0),
+    new THREE.Vector3(88.0, 0.02, 44.0),
+    new THREE.Vector3(75.0, 0.02, 45.0),
+
+    // 12. Main Straight run back to Start Line
+    new THREE.Vector3(60.0, 0.02, 45.0),
+    new THREE.Vector3(42.0, 0.02, 45.0),
   ];
 
   const curve = new THREE.CatmullRomCurve3(points, true, "centripetal", 0.5);
-  const SAMPLES = 320;
-  const TRACK_WIDTH = 9.5;
+  const SAMPLES = 360;
+  const TRACK_WIDTH = 9.0;
   const STRIPE_PERIOD = 3.2;
 
   const positions: number[] = [];
@@ -201,14 +202,16 @@ export function buildMonzaGeometry() {
   let cumulativeDist = 0;
 
   for (let i = 0; i <= SAMPLES; i++) {
-    const t = i / SAMPLES;
     const p = pts[i % SAMPLES];
-    const tangent = curve.getTangentAt(t % 1).normalize();
+    // Central difference tangent from spaced points ensures seamless continuity
+    const nextP = pts[(i + 1) % SAMPLES];
+    const prevP = pts[(i - 1 + SAMPLES) % SAMPLES];
+    const tangent = nextP.clone().sub(prevP).normalize();
     const norm = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
 
     if (i > 0) {
-      const prevP = pts[(i - 1) % SAMPLES];
-      cumulativeDist += p.distanceTo(prevP);
+      const prevPt = pts[(i - 1) % SAMPLES];
+      cumulativeDist += p.distanceTo(prevPt);
     }
 
     const u = cumulativeDist / STRIPE_PERIOD;
@@ -310,19 +313,19 @@ export function RacingTrack({ showCurbs = true }: RacingTrackProps) {
       {/* Checkered Start / Finish Line on the Rettifilo Straight */}
       <mesh
         rotation={[-Math.PI / 2, 0, Math.PI / 2]}
-        position={[13.08, 0.024, 41.27]}
+        position={[25.0, 0.024, 45.0]}
         material={startLineMaterial}
         receiveShadow
       >
-        <planeGeometry args={[9.5, 1.8]} />
+        <planeGeometry args={[9.0, 1.8]} />
       </mesh>
 
       {/* Starting Grid Line markings along the straight heading West */}
-      {[5, -3, -11, -19].map((x, idx) => (
+      {[17, 9, 1, -7].map((x, idx) => (
         <mesh
           key={x}
           rotation={[-Math.PI / 2, 0, Math.PI / 2]}
-          position={[x, 0.023, 41.27 + (idx % 2 === 0 ? 2.2 : -2.2)]}
+          position={[x, 0.023, 45.0 + (idx % 2 === 0 ? 2.2 : -2.2)]}
         >
           <planeGeometry args={[2.5, 0.25]} />
           <meshBasicMaterial color="#ffffff" opacity={0.7} transparent />
@@ -332,7 +335,7 @@ export function RacingTrack({ showCurbs = true }: RacingTrackProps) {
   );
 }
 
-/* ---------- Top-Down Isometric Camera (Bruno Simon Folio style) ---------- */
+/* ---------- Top-Down Camera (Directly aligned with Track & Minimap) ---------- */
 
 export function FolioTopDownCam({
   pose,
@@ -345,7 +348,7 @@ export function FolioTopDownCam({
   const st = useRef({
     ready: false,
     smoothedTarget: new THREE.Vector3(),
-    currentRadius: 28,
+    currentRadius: 32,
   });
 
   useFrame((_, delta) => {
@@ -363,19 +366,19 @@ export function FolioTopDownCam({
     }
 
     // Dynamic zoom based on driving speed
-    const baseRadius = 26 * zoomMultiplier;
-    const speedZoom = Math.min(12, Math.abs(p.speed) * 0.45);
+    const baseRadius = 28 * zoomMultiplier;
+    const speedZoom = Math.min(14, Math.abs(p.speed) * 0.45);
     const targetRadius = baseRadius + speedZoom;
     s.currentRadius += (targetRadius - s.currentRadius) * (1 - Math.exp(-3.5 * dt));
 
-    // Bruno Simon's spherical angles
-    const phi = Math.PI * 0.27;
-    const theta = Math.PI * 0.25;
+    // High-angle top-down view aligned straight with the track axes (theta = 0)
+    const phi = Math.PI * 0.16; // ~28.8° tilt from overhead for rich 3D depth
+    const theta = 0;            // Aligns screen-X (horizontal) and screen-Z (vertical) 1:1 with Minimap
 
     const r = s.currentRadius;
-    const offsetX = r * Math.sin(phi) * Math.sin(theta);
+    const offsetX = 0;
     const offsetY = r * Math.cos(phi);
-    const offsetZ = r * Math.sin(phi) * Math.cos(theta);
+    const offsetZ = r * Math.sin(phi);
 
     camera.position.set(
       s.smoothedTarget.x + offsetX,

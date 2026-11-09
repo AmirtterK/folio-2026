@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Toy car</title>
+<style>
+:root{--bg:#ece8e1;--ink:#2a2622;--btn:#fffdf9;--btn-on:#ff7a1a;--line:#cfc8bd;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1d1b19;--ink:#ece6dc;--btn:#2b2825;--btn-on:#ff7a1a;--line:#46413b}}
+:root[data-theme="dark"]{--bg:#1d1b19;--ink:#ece6dc;--btn:#2b2825;--btn-on:#ff7a1a;--line:#46413b}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif;overflow:hidden;touch-action:none}
+canvas{display:block;width:100%;height:100%}
+#hint{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top,0px) + 14px);text-align:center;font-size:14px;opacity:.75;padding:0 16px}
+#pad{position:fixed;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);display:flex;justify-content:space-between;padding:0 20px;pointer-events:none}
+.grp{display:flex;gap:10px;pointer-events:auto}
+button{width:60px;height:60px;border-radius:16px;border:2px solid var(--line);background:var(--btn);color:var(--ink);font-size:22px;cursor:pointer;touch-action:none;user-select:none;transition:transform .08s,background .08s}
+button.on{background:var(--btn-on);color:#fff;border-color:var(--btn-on);transform:translateY(2px) scale(.96)}
+</style>
+</head>
+<body>
+<div id="hint">Drive with W / S, steer with A / D, brake with Space. Drag to orbit, scroll to zoom.</div>
+<div id="pad">
+  <div class="grp"><button data-k="left" aria-label="Steer left">◀</button><button data-k="right" aria-label="Steer right">▶</button></div>
+  <div class="grp"><button data-k="back" aria-label="Reverse">▼</button><button data-k="fwd" aria-label="Forward">▲</button></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+document.body.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+const cam = new THREE.PerspectiveCamera(40,1,.1,100);
+
+scene.add(new THREE.HemisphereLight(0xffffff,0x8a7f72,.9));
+const sun = new THREE.DirectionalLight(0xffffff,.9); sun.position.set(4,7,5); scene.add(sun);
+const rim = new THREE.DirectionalLight(0xffd9b0,.35); rim.position.set(-5,3,-5); scene.add(rim);
+
+const M = (c,o={}) => new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.55,metalness:.05},o));
+const mOrange=M(0xff7a1a), mDark=M(0x2b2b30,{roughness:.8}), mGlass=M(0x9fd4ff,{roughness:.15,metalness:.2}),
+      mTire=M(0x1c1c1f,{roughness:.9}), mHub=M(0xe9e6df,{metalness:.5,roughness:.3}), mLamp=M(0xfff1a8,{emissive:0xffe27a,emissiveIntensity:.8}),
+      mTail=M(0xff3b3b,{emissive:0xff2020,emissiveIntensity:.5});
+const box=(w,h,d,m,x,y,z,p)=>{const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);(p||car).add(o);return o};
+
+const root = new THREE.Group(); scene.add(root);
+const car = new THREE.Group(); root.add(car);   // body group (leans and bobs)
+
+// body
+box(1.8,.55,3.3,mOrange,0,.95,0);
+box(1.85,.18,3.35,mDark,0,.62,0);
+box(1.45,.6,1.6,mOrange,0,1.52,-.25);
+box(1.5,.38,1.2,mGlass,0,1.55,-.25).scale.set(1.01,1,1.02);
+box(1.2,.35,.1,mGlass,0,1.55,.57).rotation.x=-.5;
+box(1.7,.08,1.7,mDark,0,1.85,-.25);
+// bumpers and lamps
+box(1.9,.22,.18,mDark,0,.78,1.72); box(1.9,.22,.18,mDark,0,.78,-1.72);
+for(const s of[-1,1]){
+  const l=new THREE.Mesh(new THREE.SphereGeometry(.17,16,12),mLamp); l.position.set(s*.62,1.02,1.66); l.scale.z=.6; car.add(l);
+  box(.3,.16,.08,mTail,s*.62,1.02,-1.66);
+  box(.12,.12,.5,mDark,s*.95,1.25,.55);   // little mirrors
+}
+box(1.1,.12,.06,mDark,0,.9,1.66);
+
+// wheels
+const wheels=[], steerPivots=[];
+function makeWheel(x,z,front){
+  const pivot=new THREE.Group(); pivot.position.set(x,.5,z); car.add(pivot);
+  const spin=new THREE.Group(); pivot.add(spin);
+  const tire=new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,.38,28),mTire); tire.rotation.z=Math.PI/2; spin.add(tire);
+  for(let i=0;i<14;i++){                         // tread lugs so the spin is visible
+    const a=i/14*Math.PI*2, lug=new THREE.Mesh(new THREE.BoxGeometry(.4,.09,.12),mTire);
+    lug.position.set(0,Math.sin(a)*.52,Math.cos(a)*.52); lug.rotation.x=-a+Math.PI/2*0; lug.rotation.x=a; spin.add(lug);
+  }
+  const side=x>0?1:-1;
+  const hub=new THREE.Mesh(new THREE.CylinderGeometry(.27,.27,.42,20),mHub); hub.rotation.z=Math.PI/2; spin.add(hub);
+  for(let i=0;i<5;i++){                          // spokes
+    const sp=new THREE.Mesh(new THREE.BoxGeometry(.06,.46,.08),mDark); sp.position.x=side*.0; sp.rotation.x=i/5*Math.PI; spin.add(sp);
+  }
+  const cap=new THREE.Mesh(new THREE.CylinderGeometry(.09,.09,.46,12),mOrange); cap.rotation.z=Math.PI/2; spin.add(cap);
+  wheels.push(spin); if(front) steerPivots.push(pivot);
+}
+makeWheel(1.1,1.1,true); makeWheel(-1.1,1.1,true); makeWheel(1.1,-1.1,false); makeWheel(-1.1,-1.1,false);
+car.position.y=.02;
+
+// controls
+const keys={fwd:0,back:0,left:0,right:0,brake:0};
+const map={KeyW:'fwd',ArrowUp:'fwd',KeyS:'back',ArrowDown:'back',KeyA:'left',ArrowLeft:'left',KeyD:'right',ArrowRight:'right',Space:'brake'};
+const btns={}; document.querySelectorAll('button').forEach(b=>btns[b.dataset.k]=b);
+function setKey(k,v){keys[k]=v; if(btns[k]) btns[k].classList.toggle('on',!!v)}
+addEventListener('keydown',e=>{if(map[e.code]){setKey(map[e.code],1);e.preventDefault()}});
+addEventListener('keyup',e=>{if(map[e.code])setKey(map[e.code],0)});
+addEventListener('blur',()=>Object.keys(keys).forEach(k=>setKey(k,0)));
+Object.entries(btns).forEach(([k,b])=>{
+  b.addEventListener('pointerdown',e=>{b.setPointerCapture(e.pointerId);setKey(k,1);e.stopPropagation()});
+  ['pointerup','pointercancel','lostpointercapture'].forEach(t=>b.addEventListener(t,()=>setKey(k,0)));
+});
+
+// orbit camera (drag + wheel + pinch)
+let az=.9, el=.32, dist=9.5, drag=null;
+const cv=renderer.domElement, pts=new Map(); let pinch=0;
+cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);pts.set(e.pointerId,[e.clientX,e.clientY]);drag=[e.clientX,e.clientY]});
+cv.addEventListener('pointermove',e=>{
+  if(!pts.has(e.pointerId))return; pts.set(e.pointerId,[e.clientX,e.clientY]);
+  if(pts.size===2){const [a,b]=[...pts.values()];const d=Math.hypot(a[0]-b[0],a[1]-b[1]);if(pinch)dist=Math.min(18,Math.max(5,dist*pinch/d));pinch=d;return}
+  if(drag){az-=(e.clientX-drag[0])*.008;el=Math.min(1.3,Math.max(.02,el+(e.clientY-drag[1])*.006));drag=[e.clientX,e.clientY]}
+});
+['pointerup','pointercancel'].forEach(t=>cv.addEventListener(t,e=>{pts.delete(e.pointerId);pinch=0;drag=pts.size?drag:null}));
+cv.addEventListener('wheel',e=>{dist=Math.min(18,Math.max(5,dist*(1+e.deltaY*.001)));e.preventDefault()},{passive:false});
+
+function resize(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix()}
+addEventListener('resize',resize); resize();
+
+// loop
+let speed=0, steer=0, pitch=0, roll=0, prev=performance.now();
+function frame(now){
+  const dt=Math.min(.05,(now-prev)/1000); prev=now;
+  const throttle=keys.fwd-keys.back;
+  const target=throttle*14;
+  speed+=(target-speed)*Math.min(1,dt*(throttle?2.2:1.2));         // accelerate / coast
+  if(keys.brake) speed*=Math.pow(.02,dt);
+  if(Math.abs(speed)<.02&&!throttle) speed=0;
+  const steerTarget=(keys.left-keys.right)*.55;
+  steer+=(steerTarget-steer)*Math.min(1,dt*9);
+  const spin=speed*dt/.5;                                         // rolling without slipping: angle = distance / radius
+  wheels.forEach(w=>w.rotation.x+=spin);
+  steerPivots.forEach(p=>p.rotation.y=steer);
+  const accel=(target-speed)*(throttle?1:0)-(keys.brake?speed*.5:0);
+  pitch+=(-accel*.004-pitch)*Math.min(1,dt*6);
+  roll+=(steer*speed*.006-roll)*Math.min(1,dt*6);
+  car.rotation.x=pitch; car.rotation.z=roll;
+  car.position.y=.02+Math.abs(Math.sin(now*.02))*Math.min(.025,Math.abs(speed)*.002);
+  cam.position.set(Math.sin(az)*Math.cos(el)*dist, Math.sin(el)*dist+1, Math.cos(az)*Math.cos(el)*dist);
+  cam.lookAt(0,.95,0);
+  renderer.render(scene,cam);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

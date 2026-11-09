@@ -1,0 +1,657 @@
+"use client";
+
+/**
+ * ToyCarSmoke: a separate copy of ToyCar with exhaust smoke.
+ *
+ * Same car, same controls and props as ToyCar, plus:
+ *   smoke       turn the exhaust smoke on or off (default true)
+ *   smokeColor  smoke tint (default a warm grey)
+ *
+ * Smoke comes out of both tailpipes while the car is driving. Harder throttle
+ * and higher speed give thicker, longer streams. The puffs are blown backward
+ * (or forward when reversing) so the car looks like it is moving, even though
+ * it stays in place. Nothing comes out when the car is stopped.
+ *
+ * Give it a `terrain` function (height at x, z) and it drives for real: it moves, turns, rides
+ * over hills, pitches and rolls with the ground, and leaves its smoke behind in the world.
+ * `pose` (optional ref) receives its world position and heading every frame.
+ *
+ * Keep ToyCar.tsx untouched as the safe version; edit this one freely.
+ */
+
+import { useEffect, useMemo, useRef } from "react";
+import type { MutableRefObject } from "react";
+import { useFrame } from "@react-three/fiber";
+import type { ThreeElements } from "@react-three/fiber";
+import * as THREE from "three";
+import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+
+export type CarInput = { fwd: number; back: number; left: number; right: number; brake: number };
+
+export type CarPose = { x: number; y: number; z: number; yaw: number; speed: number };
+
+export type ToyCarSmokeProps = {
+  /** Paint color. */
+  color?: string;
+  /** Listen to the keyboard. Set false if you supply your own `input`. */
+  keyboard?: boolean;
+  /** External input ref (values 0 or 1). Used instead of the keyboard when provided. */
+  input?: MutableRefObject<CarInput>;
+  /** Top ground speed in units per second. */
+  maxSpeed?: number;
+  /** Max front-wheel steering angle in radians. */
+  maxSteer?: number;
+  /** Called every frame with the current ground speed. */
+  onSpeed?: (speed: number) => void;
+  /** Exhaust smoke on or off. */
+  smoke?: boolean;
+  /** Smoke tint. */
+  smokeColor?: string;
+  /** Ground height at (x, z). When given, the car really drives over that ground. */
+  terrain?: (x: number, z: number) => number;
+  /** Receives the car's world position and heading every frame (for cameras, lights). */
+  pose?: MutableRefObject<CarPose>;
+  /** Where the car may drive when `terrain` is given (center of the car stays inside). */
+  bounds?: { minX: number; maxX: number; minZ: number; maxZ: number };
+  /** Where the car starts when `terrain` is given. */
+  start?: { x: number; z: number; yaw?: number };
+  /** Optional scale factor for the car (default 1.0). */
+  carScale?: number;
+} & Omit<ThreeElements["group"], "ref">;
+
+const KEY_MAP: Record<string, keyof CarInput> = {
+  KeyW: "fwd", ArrowUp: "fwd", KeyS: "back", ArrowDown: "back",
+  KeyA: "left", ArrowLeft: "left", KeyD: "right", ArrowRight: "right", Space: "brake",
+};
+
+const WHEEL_R = 0.45;
+const WHEEL_X = 0.86;
+const WHEEL_Z = 1.2;
+const LUGS = 28;
+const SPOKE_PAIRS = 5;
+const DEFAULT_BOUNDS = { minX: -235, maxX: 235, minZ: -235, maxZ: 235 };
+
+/* ---------- geometry helpers ---------- */
+
+/**
+ * Make the big flat side faces (the extrusion caps) perfectly flat-shaded. Creased normals blend them
+ * with the rounded bevel, and the long sliver triangles there then show up as thin shading streaks.
+ * Bevels and curved parts keep their smooth normals.
+ */
+function flattenCaps(g: THREE.BufferGeometry) {
+  const pos = g.attributes.position as THREE.BufferAttribute;
+  const nor = g.attributes.normal as THREE.BufferAttribute;
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), n = new THREE.Vector3();
+  for (let i = 0; i + 2 < pos.count; i += 3) {
+    a.fromBufferAttribute(pos, i);
+    b.fromBufferAttribute(pos, i + 1);
+    c.fromBufferAttribute(pos, i + 2);
+    n.subVectors(c, b).cross(a.sub(b)).normalize();
+    if (Math.abs(n.x) > 0.9999) {
+      const out = Math.sign(nor.getX(i) + nor.getX(i + 1) + nor.getX(i + 2)) || 1;
+      for (let j = 0; j < 3; j++) nor.setXYZ(i + j, out, 0, 0);
+    }
+  }
+  nor.needsUpdate = true;
+}
+
+/** Extrude a side-view profile (x = car length, y = height) across the car's width, with rounded edges. */
+function extrudeSide(shape: THREE.Shape, width: number, bevel: number, segments = 5) {
+  const depth = width - bevel * 2;
+  const g = new THREE.ExtrudeGeometry(shape, {
+    depth,
+    bevelEnabled: true,
+    bevelThickness: bevel,
+    bevelSize: bevel,
+    bevelOffset: -bevel,
+    bevelSegments: segments,
+    curveSegments: 28,
+  });
+  g.translate(0, 0, -depth / 2);
+  g.rotateY(-Math.PI / 2); // profile x -> car z, extrusion -> car x
+  const out = toCreasedNormals(g, 0.7); // smooth curves, keep hard edges
+  flattenCaps(out);
+  return out;
+}
+
+function poly(pts: [number, number][]) {
+  const s = new THREE.Shape();
+  pts.forEach(([x, y], i) => (i ? s.lineTo(x, y) : s.moveTo(x, y)));
+  s.closePath();
+  return s;
+}
+
+/** Thin roof panel sitting flush on top of the glass, so the cabin reads as glass with a roof, not a fat cap. */
+function roofShape() {
+  const s = new THREE.Shape();
+  s.moveTo(0.46, 1.66);
+  s.quadraticCurveTo(0.4, 1.775, 0.12, 1.785); // windshield header
+  s.lineTo(-0.4, 1.795);                        // gentle crown
+  s.quadraticCurveTo(-0.62, 1.79, -0.68, 1.66); // rear edge, just past the rear glass
+  s.closePath();
+  return s;
+}
+
+/** Main body: side silhouette with two wheel arches cut out of the bottom. */
+function bodyShape() {
+  const r = 0.52, cy = WHEEL_R, sill = 0.32;
+  const dx = Math.sqrt(r * r - (cy - sill) ** 2);
+  const a1 = Math.atan2(sill - cy, -dx);
+  const a2 = Math.atan2(sill - cy, dx);
+  const s = new THREE.Shape();
+  s.moveTo(-1.9, sill);
+  s.lineTo(-WHEEL_Z - dx, sill);
+  s.absarc(-WHEEL_Z, cy, r, a1 + Math.PI * 2, a2 + Math.PI * 2, true);
+  s.lineTo(WHEEL_Z - dx, sill);
+  s.absarc(WHEEL_Z, cy, r, a1 + Math.PI * 2, a2 + Math.PI * 2, true);
+  s.lineTo(1.9, sill);
+  s.lineTo(1.97, 0.5);
+  s.lineTo(1.97, 0.85);
+  s.lineTo(1.78, 1.06);
+  s.lineTo(0.95, 1.14);   // hood
+  s.lineTo(-1.5, 1.16);   // deck
+  s.lineTo(-1.85, 1.12);
+  s.lineTo(-1.97, 0.9);
+  s.lineTo(-1.97, 0.5);
+  s.closePath();
+  return s;
+}
+
+/** Rounded tire profile revolved around its axle. */
+function makeTireGeometry() {
+  const pts = [
+    [0.27, -0.15], [0.33, -0.17], [0.40, -0.16], [0.435, -0.12], [0.452, -0.06],
+    [0.455, 0], [0.452, 0.06], [0.435, 0.12], [0.40, 0.16], [0.33, 0.17], [0.27, 0.15],
+  ].map(([r, h]) => new THREE.Vector2(r, h));
+  const g = new THREE.LatheGeometry(pts, 48);
+  g.rotateZ(Math.PI / 2); // axle along X
+  return g;
+}
+
+/* ---------- shared materials ---------- */
+
+function useMaterials(color: string) {
+  return useMemo(() => {
+    const std = (c: string, o: THREE.MeshStandardMaterialParameters = {}) =>
+      new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, metalness: 0.05, ...o });
+    return {
+      paint: new THREE.MeshPhysicalMaterial({
+        color, roughness: 0.28, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.08,
+      }),
+      glass: new THREE.MeshPhysicalMaterial({
+        color: "#22303d", roughness: 0.05, metalness: 0.6, clearcoat: 1,
+      }),
+      trim: std("#17171a", { roughness: 0.7 }),
+      tire: std("#161618", { roughness: 0.92 }),
+      chrome: std("#d8d8dc", { metalness: 1, roughness: 0.18 }),
+      disc: std("#8c8c94", { metalness: 0.85, roughness: 0.4 }),
+      caliper: std("#d8262c", { roughness: 0.4 }),
+      lamp: std("#fff6c9", { emissive: "#ffe9a0", emissiveIntensity: 0.9, roughness: 0.2 }),
+      tail: std("#ff2b2b", { emissive: "#ff1a1a", emissiveIntensity: 0.7, roughness: 0.3 }),
+      plate: std("#f1efe8", { roughness: 0.5 }),
+    };
+  }, [color]);
+}
+
+type Mats = ReturnType<typeof useMaterials>;
+
+/* ---------- smoke ---------- */
+
+const SMOKE_MAX = 240;
+const EXHAUST_X = 0.5;
+const EXHAUST_Y = 0.4;
+const EXHAUST_Z = -2.08; // just past the tip of the tailpipe
+
+const SMOKE_VERT = /* glsl */ `
+  attribute float aAlpha;
+  attribute float aSize;
+  uniform float uHeight;
+  varying float vAlpha;
+  void main() {
+    vAlpha = aAlpha;
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * mv;
+    // world-space diameter -> pixels, honoring the camera's field of view
+    gl_PointSize = aSize * uHeight * 0.5 * projectionMatrix[1][1] / max(0.001, -mv.z);
+  }
+`;
+
+const SMOKE_FRAG = /* glsl */ `
+  uniform vec3 uColor;
+  varying float vAlpha;
+  void main() {
+    float d = length(gl_PointCoord - vec2(0.5));
+    float soft = smoothstep(0.5, 0.1, d);
+    gl_FragColor = vec4(uColor, soft * vAlpha);
+    if (gl_FragColor.a < 0.005) discard;
+  }
+`;
+
+function createSmoke(color: string) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(SMOKE_MAX * 3), 3));
+  geo.setAttribute("aAlpha", new THREE.BufferAttribute(new Float32Array(SMOKE_MAX), 1));
+  geo.setAttribute("aSize", new THREE.BufferAttribute(new Float32Array(SMOKE_MAX), 1));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: new THREE.Color(color) }, uHeight: { value: 800 } },
+    vertexShader: SMOKE_VERT,
+    fragmentShader: SMOKE_FRAG,
+    transparent: true,
+    depthWrite: false,
+  });
+  return {
+    geo,
+    mat,
+    vel: new Float32Array(SMOKE_MAX * 3),
+    age: new Float32Array(SMOKE_MAX).fill(1),
+    life: new Float32Array(SMOKE_MAX).fill(1), // age >= life means the particle is dead
+    a0: new Float32Array(SMOKE_MAX),
+    head: 0,
+    acc: 0,
+    count: 0,
+  };
+}
+
+type Smoke = ReturnType<typeof createSmoke>;
+
+/** Tailpipe positions (side +x and -x) and car velocity in world space, used when the car really drives. */
+type Exhaust = { p: THREE.Vector3; n: THREE.Vector3; vx: number; vz: number };
+
+function spawnPuff(sm: Smoke, speed: number, throttle: number, ex?: Exhaust) {
+  const i = sm.head;
+  sm.head = (sm.head + 1) % SMOKE_MAX;
+  const side = sm.count++ % 2 ? 1 : -1;
+  const pos = sm.geo.attributes.position as THREE.BufferAttribute;
+  if (ex) {
+    // driving: puffs are born at the tailpipes in world space and get left behind as the car moves on
+    const p = side === 1 ? ex.p : ex.n;
+    pos.setXYZ(i, p.x + (Math.random() - 0.5) * 0.05, p.y, p.z + (Math.random() - 0.5) * 0.05);
+    sm.vel[i * 3] = ex.vx * 0.25 + (Math.random() - 0.5) * 0.4;
+    sm.vel[i * 3 + 1] = 0.35 + Math.random() * 0.45;
+    sm.vel[i * 3 + 2] = ex.vz * 0.25 + (Math.random() - 0.5) * 0.4;
+  } else {
+    pos.setXYZ(i, side * EXHAUST_X + (Math.random() - 0.5) * 0.05, EXHAUST_Y, EXHAUST_Z);
+
+    // car stays in place: air rushes past it, blowing the smoke backward (none is spawned when reversing)
+    const dir = -1;
+    const flow = Math.abs(speed) * 0.8 + 1.0;
+    sm.vel[i * 3] = side * 0.12 + (Math.random() - 0.5) * 0.35;
+    sm.vel[i * 3 + 1] = 0.35 + Math.random() * 0.45;
+    sm.vel[i * 3 + 2] = dir * flow * (0.8 + Math.random() * 0.4);
+  }
+
+  sm.age[i] = 0;
+  sm.life[i] = 1.1 + Math.random() * 0.9;
+  sm.a0[i] = throttle !== 0 ? 0.5 : 0.28; // thicker puffs under throttle
+}
+
+function updateSmoke(sm: Smoke, dt: number, speed: number, throttle: number, on: boolean, ex?: Exhaust) {
+  // no smoke while reversing (reverse pedal held, or still rolling backward)
+  const reversing = throttle < 0 || speed < -0.05;
+  const rate = !on || reversing ? 0 : throttle !== 0 ? Math.min(45, 12 + Math.abs(speed) * 3) : Math.min(7, Math.abs(speed) * 0.8);
+  sm.acc = reversing ? 0 : sm.acc + rate * dt;
+  while (sm.acc >= 1) {
+    sm.acc -= 1;
+    spawnPuff(sm, speed, throttle, ex);
+  }
+
+  const pos = sm.geo.attributes.position as THREE.BufferAttribute;
+  const alpha = sm.geo.attributes.aAlpha as THREE.BufferAttribute;
+  const size = sm.geo.attributes.aSize as THREE.BufferAttribute;
+  const drag = Math.max(0, 1 - 0.6 * dt);
+
+  for (let i = 0; i < SMOKE_MAX; i++) {
+    if (sm.age[i] >= sm.life[i]) {
+      alpha.setX(i, 0);
+      size.setX(i, 0);
+      continue;
+    }
+    sm.age[i] += reversing ? dt * 5 : dt; // leftover puffs clear out fast when reversing
+    const t = Math.min(1, sm.age[i] / sm.life[i]);
+    sm.vel[i * 3] *= drag;
+    sm.vel[i * 3 + 2] *= drag;
+    sm.vel[i * 3 + 1] *= Math.max(0, 1 - 0.3 * dt);
+    pos.setXYZ(
+      i,
+      pos.getX(i) + sm.vel[i * 3] * dt,
+      pos.getY(i) + sm.vel[i * 3 + 1] * dt,
+      pos.getZ(i) + sm.vel[i * 3 + 2] * dt
+    );
+    size.setX(i, 0.14 + 0.5 * Math.sqrt(t));        // puffs expand as they cool
+    alpha.setX(i, sm.a0[i] * Math.pow(1 - t, 1.5)); // and fade out
+  }
+  pos.needsUpdate = true;
+  alpha.needsUpdate = true;
+  size.needsUpdate = true;
+}
+
+/* ---------- wheel ---------- */
+
+type WheelProps = {
+  side: 1 | -1;
+  z: number;
+  mats: Mats;
+  tireGeo: THREE.BufferGeometry;
+  spinRef: (g: THREE.Group | null) => void;
+  pivotRef?: (g: THREE.Group | null) => void;
+};
+
+function Wheel({ side, z, mats, tireGeo, spinRef, pivotRef }: WheelProps) {
+  const lugs = useMemo(
+    () =>
+      Array.from({ length: LUGS }, (_, i) => {
+        const a = (i / LUGS) * Math.PI * 2;
+        return { pos: [0, Math.sin(a) * 0.455, Math.cos(a) * 0.455] as [number, number, number], rot: Math.PI / 2 - a };
+      }),
+    []
+  );
+  const nuts = useMemo(
+    () =>
+      Array.from({ length: 5 }, (_, i) => {
+        const a = (i / 5) * Math.PI * 2;
+        return [side * 0.175, Math.sin(a) * 0.1, Math.cos(a) * 0.1] as [number, number, number];
+      }),
+    [side]
+  );
+
+  return (
+    <group position={[side * WHEEL_X, WHEEL_R, z]} ref={pivotRef}>
+      {/* caliper stays put while the wheel spins */}
+      <mesh position={[side * 0.01, 0.15, 0.13]} material={mats.caliper}>
+        <boxGeometry args={[0.11, 0.14, 0.13]} />
+      </mesh>
+
+      <group ref={spinRef}>
+        <mesh geometry={tireGeo} material={mats.tire} />
+        {lugs.map((l, i) => (
+          <mesh key={i} position={l.pos} rotation={[l.rot, 0, 0]} material={mats.tire}>
+            <boxGeometry args={[0.27, 0.03, 0.06]} />
+          </mesh>
+        ))}
+
+        {/* rim barrel and lip */}
+        <mesh rotation={[0, 0, Math.PI / 2]} material={mats.chrome}>
+          <cylinderGeometry args={[0.3, 0.3, 0.3, 36, 1, true]} />
+        </mesh>
+        <mesh position={[side * 0.15, 0, 0]} rotation={[0, Math.PI / 2, 0]} material={mats.chrome}>
+          <torusGeometry args={[0.295, 0.022, 10, 40]} />
+        </mesh>
+
+        {/* brake disc seen through the spokes */}
+        <mesh position={[side * 0.03, 0, 0]} rotation={[0, 0, Math.PI / 2]} material={mats.disc}>
+          <cylinderGeometry args={[0.25, 0.25, 0.03, 36]} />
+        </mesh>
+
+        {/* 10 spokes */}
+        {Array.from({ length: SPOKE_PAIRS }, (_, i) => (
+          <mesh key={i} position={[side * 0.13, 0, 0]} rotation={[(i / SPOKE_PAIRS) * Math.PI, 0, 0]} material={mats.chrome}>
+            <boxGeometry args={[0.035, 0.58, 0.05]} />
+          </mesh>
+        ))}
+
+        {/* hub cap and lug nuts */}
+        <mesh position={[side * 0.16, 0, 0]} rotation={[0, 0, Math.PI / 2]} material={mats.paint}>
+          <cylinderGeometry args={[0.075, 0.075, 0.04, 20]} />
+        </mesh>
+        {nuts.map((p, i) => (
+          <mesh key={i} position={p} rotation={[0, 0, Math.PI / 2]} material={mats.chrome}>
+            <cylinderGeometry args={[0.015, 0.015, 0.03, 8]} />
+          </mesh>
+        ))}
+      </group>
+    </group>
+  );
+}
+
+/* ---------- car ---------- */
+
+export default function ToyCarSmoke({
+  color = "#ff7a1a",
+  keyboard = true,
+  input,
+  maxSpeed = 14,
+  maxSteer = 0.55,
+  onSpeed,
+  smoke: smokeOn = true,
+  smokeColor = "#9a9792",
+  terrain,
+  pose,
+  bounds,
+  start,
+  carScale = 1.0,
+  ...groupProps
+}: ToyCarSmokeProps) {
+  const carRef = useRef<THREE.Group>(null);
+  const spinGroups = useRef<THREE.Group[]>([]);
+  const steerPivots = useRef<THREE.Group[]>([]);
+  const keys = useRef<CarInput>({ fwd: 0, back: 0, left: 0, right: 0, brake: 0 });
+  const sim = useRef({ speed: 0, steer: 0, pitch: 0, roll: 0 });
+
+  // world driving (only used when `terrain` is given)
+  const outerRef = useRef<THREE.Group>(null);
+  const poseRef = useRef<THREE.Group>(null);
+  const world = useRef({ x: start?.x ?? 0, z: start?.z ?? 0, y: 0, yaw: start?.yaw ?? 0, pitch: 0, roll: 0, slope: 0 });
+  const exhaust = useMemo(() => ({ p: new THREE.Vector3(), n: new THREE.Vector3(), vx: 0, vz: 0 }), []);
+  const driving = !!terrain;
+  useEffect(() => {
+    if (!driving) return;
+    carRef.current?.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = true; });
+  }, [driving]);
+
+  const mats = useMaterials(color);
+  const geo = useMemo(
+    () => ({
+      body: extrudeSide(bodyShape(), 1.8, 0.1),
+      glass: extrudeSide(poly([[0.9, 1.12], [0.4, 1.7], [-0.6, 1.72], [-1.1, 1.15]]), 1.4, 0.05, 4),
+      roof: extrudeSide(roofShape(), 1.44, 0.03, 4),
+      tire: makeTireGeometry(),
+      flare: new THREE.TorusGeometry(0.545, 0.035, 10, 40, Math.PI).rotateY(Math.PI / 2),
+    }),
+    []
+  );
+
+  const smoke = useMemo(() => createSmoke(smokeColor), []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    smoke.mat.uniforms.uColor.value.set(smokeColor);
+  }, [smoke, smokeColor]);
+  useEffect(
+    () => () => {
+      smoke.geo.dispose();
+      smoke.mat.dispose();
+    },
+    [smoke]
+  );
+
+  useEffect(() => {
+    if (!keyboard) return;
+    const down = (e: KeyboardEvent) => {
+      const k = KEY_MAP[e.code];
+      if (k) { keys.current[k] = 1; e.preventDefault(); }
+    };
+    const up = (e: KeyboardEvent) => {
+      const k = KEY_MAP[e.code];
+      if (k) keys.current[k] = 0;
+    };
+    const reset = () => { keys.current = { fwd: 0, back: 0, left: 0, right: 0, brake: 0 }; };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", reset);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", reset);
+    };
+  }, [keyboard]);
+
+  const collect = (list: MutableRefObject<THREE.Group[]>, i: number) => (g: THREE.Group | null) => {
+    if (g) list.current[i] = g;
+  };
+
+  useFrame((state, delta) => {
+    const dt = Math.min(delta, 0.05);
+    const s = sim.current;
+    const k = input ? input.current : keys.current;
+
+    const throttle = k.fwd - k.back;
+    const target = throttle * maxSpeed;
+    s.speed += (target - s.speed) * Math.min(1, dt * (throttle ? 2.2 : 1.2));
+    if (terrain) s.speed -= world.current.slope * 7 * dt; // uphill slows the car, downhill speeds it up
+    if (k.brake) s.speed *= Math.pow(0.02, dt);
+    if (Math.abs(s.speed) < 0.02 && !throttle) s.speed = 0;
+
+    s.steer += ((k.left - k.right) * maxSteer - s.steer) * Math.min(1, dt * 9);
+
+    if (terrain) {
+      const w = world.current;
+
+      // move: bicycle steering, a bit less twitchy at speed
+      const steerEff = s.steer / (1 + Math.abs(s.speed) * 0.12);
+      w.yaw += ((s.speed * Math.tan(steerEff)) / (WHEEL_Z * 2)) * dt;
+      w.x += Math.sin(w.yaw) * s.speed * dt;
+      w.z += Math.cos(w.yaw) * s.speed * dt;
+
+      // soft walls at the edge of the allowed area
+      const b = bounds ?? DEFAULT_BOUNDS;
+      if (w.x < b.minX || w.x > b.maxX || w.z < b.minZ || w.z > b.maxZ) {
+        w.x = Math.max(b.minX, Math.min(b.maxX, w.x));
+        w.z = Math.max(b.minZ, Math.min(b.maxZ, w.z));
+        s.speed *= 0.9;
+      }
+
+      // sample the ground under all four wheels, then sit the car on it
+      const sn = Math.sin(w.yaw), cs = Math.cos(w.yaw);
+      const wheelX = WHEEL_X * carScale;
+      const wheelZ = WHEEL_Z * carScale;
+      const ground = (lx: number, lz: number) => terrain(w.x + cs * lx + sn * lz, w.z - sn * lx + cs * lz);
+      const fl = ground(wheelX, wheelZ), fr = ground(-wheelX, wheelZ);
+      const rl = ground(wheelX, -wheelZ), rr = ground(-wheelX, -wheelZ);
+      const front = (fl + fr) / 2, rear = (rl + rr) / 2;
+      const slope = (front - rear) / (wheelZ * 2); // rise per unit driven forward
+      const ease = Math.min(1, dt * 14);
+      w.y += ((front + rear) / 2 - w.y) * ease;
+      w.pitch += (-Math.atan(slope) - w.pitch) * ease;
+      w.roll += (Math.atan((fl + rl - fr - rr) / 2 / (wheelX * 2)) - w.roll) * ease;
+      w.slope = slope;
+
+      const g = poseRef.current;
+      if (g) {
+        g.position.set(w.x, w.y, w.z);
+        g.rotation.set(w.pitch, w.yaw, w.roll, "YXZ");
+        g.updateMatrixWorld();
+        exhaust.p.set(EXHAUST_X * carScale, EXHAUST_Y * carScale, EXHAUST_Z * carScale);
+        exhaust.n.set(-EXHAUST_X * carScale, EXHAUST_Y * carScale, EXHAUST_Z * carScale);
+        g.localToWorld(exhaust.p);
+        g.localToWorld(exhaust.n);
+        const outer = outerRef.current;
+        if (outer) {
+          outer.updateWorldMatrix(true, false);
+          outer.worldToLocal(exhaust.p);
+          outer.worldToLocal(exhaust.n);
+        }
+      }
+      exhaust.vx = Math.sin(w.yaw) * s.speed;
+      exhaust.vz = Math.cos(w.yaw) * s.speed;
+
+      if (pose) {
+        const p = pose.current;
+        p.x = w.x; p.y = w.y; p.z = w.z; p.yaw = w.yaw; p.speed = s.speed;
+      }
+    }
+
+    const spin = (s.speed * dt) / (WHEEL_R * carScale); // rolling without slipping
+    for (const w of spinGroups.current) if (w) w.rotation.x += spin;
+    for (const p of steerPivots.current) if (p) p.rotation.y = s.steer;
+
+    const accel = (throttle ? target - s.speed : 0) - (k.brake ? s.speed * 0.5 : 0);
+    s.pitch += (-accel * 0.004 - s.pitch) * Math.min(1, dt * 6);
+    s.roll += (s.steer * s.speed * 0.006 - s.roll) * Math.min(1, dt * 6);
+
+    const car = carRef.current;
+    if (car) {
+      car.rotation.x = s.pitch;
+      car.rotation.z = s.roll;
+      car.position.y = 0.02 * carScale + Math.abs(Math.sin(state.clock.elapsedTime * 20)) * Math.min(0.02, Math.abs(s.speed) * 0.0015);
+    }
+
+    // smoke
+    smoke.mat.uniforms.uHeight.value = state.size.height * state.gl.getPixelRatio();
+    updateSmoke(smoke, dt, s.speed, throttle, smokeOn, terrain ? exhaust : undefined);
+
+    onSpeed?.(s.speed);
+  });
+
+  return (
+    <group {...groupProps} ref={outerRef}>
+      {/* moves around the world when `terrain` is given, otherwise stays at the origin */}
+      <group ref={poseRef}>
+      <group ref={carRef} scale={carScale} position={[0, 0.02 * carScale, 0]}>
+        {/* shell */}
+        <mesh geometry={geo.body} material={mats.paint} />
+        <mesh geometry={geo.glass} material={mats.glass} />
+        <mesh geometry={geo.roof} material={mats.paint} />
+
+        {/* dark wheel wells behind the tires */}
+        {[WHEEL_Z, -WHEEL_Z].map((z) => (
+          <mesh key={z} position={[0, 0.66, z]} material={mats.trim}>
+            <boxGeometry args={[1.2, 0.6, 1.1]} />
+          </mesh>
+        ))}
+
+        {/* arch flares, door cuts, handles, skirts, B pillars, mirrors */}
+        {[-1, 1].map((s) => (
+          <group key={s}>
+            {[WHEEL_Z, -WHEEL_Z].map((z) => (
+              <mesh key={z} geometry={geo.flare} material={mats.trim} position={[s * 0.905, WHEEL_R, z]} />
+            ))}
+            <mesh position={[s * 0.903, 0.74, 0.57]} material={mats.trim}><boxGeometry args={[0.008, 0.56, 0.012]} /></mesh>
+            <mesh position={[s * 0.903, 0.74, -0.57]} material={mats.trim}><boxGeometry args={[0.008, 0.56, 0.012]} /></mesh>
+            <mesh position={[s * 0.915, 0.98, -0.42]} material={mats.chrome}><boxGeometry args={[0.025, 0.04, 0.2]} /></mesh>
+            <mesh position={[s * 0.9, 0.38, 0]} material={mats.trim}><boxGeometry args={[0.05, 0.1, 1.15]} /></mesh>
+            {/* (no B pillar: the side glass stays one clean pane up to the roof) */}
+            <mesh position={[s * 0.9, 1.19, 0.64]} material={mats.trim}><boxGeometry args={[0.14, 0.04, 0.05]} /></mesh>
+            <mesh position={[s * 0.99, 1.23, 0.62]} material={mats.paint}><boxGeometry args={[0.1, 0.1, 0.19]} /></mesh>
+
+            {/* headlight: chrome ring, lens */}
+            <mesh position={[s * 0.62, 0.86, 1.93]} scale={[1, 0.85, 0.55]} material={mats.lamp}>
+              <sphereGeometry args={[0.15, 20, 14]} />
+            </mesh>
+            <mesh position={[s * 0.62, 0.86, 1.93]} material={mats.chrome}>
+              <torusGeometry args={[0.15, 0.015, 8, 28]} />
+            </mesh>
+            {/* tail light and exhaust */}
+            <mesh position={[s * 0.62, 0.9, -1.96]} material={mats.tail}><boxGeometry args={[0.45, 0.12, 0.05]} /></mesh>
+            <mesh position={[s * 0.5, 0.4, -1.97]} rotation={[Math.PI / 2, 0, 0]} material={mats.chrome}>
+              <cylinderGeometry args={[0.055, 0.055, 0.18, 16]} />
+            </mesh>
+            {/* spoiler end plate and post */}
+            <mesh position={[s * 0.75, 1.42, -1.78]} material={mats.trim}><boxGeometry args={[0.03, 0.14, 0.38]} /></mesh>
+            <mesh position={[s * 0.5, 1.27, -1.78]} material={mats.trim}><boxGeometry args={[0.05, 0.22, 0.06]} /></mesh>
+          </group>
+        ))}
+
+        {/* front: grille, slats, splitter, lower intake */}
+        <mesh position={[0, 0.72, 1.965]} material={mats.trim}><boxGeometry args={[0.9, 0.16, 0.04]} /></mesh>
+        {[-0.05, 0, 0.05].map((dy) => (
+          <mesh key={dy} position={[0, 0.72 + dy, 1.99]} material={mats.chrome}><boxGeometry args={[0.85, 0.01, 0.015]} /></mesh>
+        ))}
+        <mesh position={[0, 0.48, 1.965]} material={mats.trim}><boxGeometry args={[1.2, 0.12, 0.04]} /></mesh>
+        <mesh position={[0, 0.34, 1.9]} material={mats.trim}><boxGeometry args={[1.7, 0.04, 0.26]} /></mesh>
+
+        {/* rear: light bar, plate, spoiler wing */}
+        <mesh position={[0, 0.9, -1.97]} material={mats.tail}><boxGeometry args={[0.5, 0.04, 0.03]} /></mesh>
+        <mesh position={[0, 0.66, -1.975]} material={mats.plate}><boxGeometry args={[0.45, 0.14, 0.03]} /></mesh>
+        <mesh position={[0, 1.38, -1.78]} material={mats.trim}><boxGeometry args={[1.5, 0.04, 0.38]} /></mesh>
+
+        {/* wheels: all four spin, front pair also steers */}
+        <Wheel side={1} z={WHEEL_Z} mats={mats} tireGeo={geo.tire} spinRef={collect(spinGroups, 0)} pivotRef={collect(steerPivots, 0)} />
+        <Wheel side={-1} z={WHEEL_Z} mats={mats} tireGeo={geo.tire} spinRef={collect(spinGroups, 1)} pivotRef={collect(steerPivots, 1)} />
+        <Wheel side={1} z={-WHEEL_Z} mats={mats} tireGeo={geo.tire} spinRef={collect(spinGroups, 2)} />
+        <Wheel side={-1} z={-WHEEL_Z} mats={mats} tireGeo={geo.tire} spinRef={collect(spinGroups, 3)} />
+      </group>
+      </group>
+
+      {/* exhaust smoke lives outside the car and pose groups so it doesn't move or tilt with the body */}
+      <points geometry={smoke.geo} material={smoke.mat} frustumCulled={false} renderOrder={2} />
+    </group>
+  );
+}

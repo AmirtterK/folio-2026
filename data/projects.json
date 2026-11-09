@@ -1,0 +1,81 @@
+[
+  {
+    "title": "Krii",
+    "description": "An AI-powered peer-to-peer rental platform featuring Google Gemini semantic search, AI vector embeddings, and an intelligent multilingual assistant.",
+    "live": "https://krii-website.vercel.app",
+    "android": "https://github.com/AmirtterK/krii-release/releases/download/v1.0.0/krii.apk",
+    "image": "/projects/krii-app.jpg",
+    "tech": ["Flutter", "Supabase", "Gemini API", "Next.js"]
+  },
+  {
+    "title": "Chess Game",
+    "description": "A cross-platform Flutter chess application powered by a custom built-in AI engine utilizing Minimax search with Alpha-Beta pruning, positional heuristics, opening book evaluation, and adaptive Elo difficulty levels.",
+    "github": "https://github.com/AmirtterK/Chess",
+    "android": "https://github.com/AmirtterK/Chess/releases/download/v1.0.0/chess-ritter.apk",
+    "image": "/projects/chess-game.jpg",
+    "tech": ["Flutter", "AI / Minimax", "Dart"]
+  },
+  {
+    "title": "Shakespeare Says",
+    "description": "A text generator that produces Shakespearean-style lines, powered by a GPT-2 model fine-tuned on Shakespeare's works and running locally through a quantized ONNX model.",
+    "github": "https://github.com/AmirtterK/shakespear-says",
+    "image": "/projects/shakespeare-says.jpg",
+    "tech": ["Next.js", "TypeScript", "GPT-2 / ONNX"]
+  },
+  {
+    "title": "Ferrari Website",
+    "description": "A Ferrari-themed showcase website with animations and 3D models, built exclusively for desktop.",
+    "github": "https://github.com/AmirtterK/Ferrari-website",
+    "live": "https://amirtterk.github.io/Ferrari-website/",
+    "image": "/projects/ferrari-site.jpg",
+    "tech": ["JavaScript", "ThreeJS"]
+  },
+  {
+    "title": "Chat App",
+    "description": "Cross-platform chat application with real-time messaging and push notifications powered by a custom Express.JS server.",
+    "github": "https://github.com/AmirtterK/Chat-App",
+    "android": "https://github.com/AmirtterK/Chat-App/releases/download/v1.0.0/Bubble.apk",
+    "image": "/projects/chat-app.jpg",
+    "tech": ["Flutter", "Express", "Firebase"]
+  },
+  {
+    "title": "E-commerce Site",
+    "description": "A full-stack e-commerce platform built with Next.js 14, TypeScript, MongoDB Atlas, and Clerk authentication, featuring shopping cart management and Google OAuth integration.",
+    "github": "https://github.com/AmirtterK/e-commerce",
+    "live": "https://handla-ecommerce.vercel.app/",
+    "image": "/projects/e-commerce.png",
+    "tech": ["nextjs", "typescript", "mongoDB", "shadcn"]
+  },
+  {
+    "title": "Dealership Site",
+    "description": "A simple PHP & MySQL site for a luxury cars dealership.",
+    "github": "https://github.com/AmirtterK/Dealership",
+    "image": "/projects/dealership-site.jpg",
+    "tech": ["PHP", "MySQL"]
+  },
+  {
+    "title": "Todo App",
+    "description": "Task management app with notifications and pomodoro.",
+    "github": "https://github.com/AmirtterK/To-Do-List",
+    "android": "https://github.com/AmirtterK/To-Do-List/releases/download/v1.0.0/Swift-list.apk",
+    "image": "/projects/todo-app.jpg",
+    "tech": ["Flutter", "SQLite"]
+  },
+  {
+    "title": "Weather App",
+    "description": "Weather forecast app using OpenWeather API.",
+    "github": "https://github.com/AmirtterK/Weather-App",
+    "android": "https://github.com/AmirtterK/Weather-App/releases/download/v1.0.0/Cloud-flow.apk",
+    "image": "/projects/weather-app.jpg",
+    "tech": ["Flutter", "OpenWeater API"]
+  },
+  {
+    "title": "Arduino Tank",
+    "description": "Arduino Nano-Powered Tank with App Controller.",
+    "githubApp": "https://github.com/AmirtterK/Tank-Controller",
+    "githubSketch": "https://github.com/AmirtterK/Arduino-Tank",
+    "android": "https://github.com/AmirtterK/Tank-Controller/releases/download/v1.0.0/williams.apk",
+    "image": "/projects/tank.jpg",
+    "tech": ["Flutter", "Arduino"]
+  }
+]

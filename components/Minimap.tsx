@@ -4,24 +4,24 @@ import { useEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
 import type { CarPose } from "@/components/ToyCarSmoke";
 
-// World coordinate bounds for the track centerline
-const MIN_X = -82;
-const MAX_X = 60;
-const MIN_Z = -85;
-const MAX_Z = 73;
+// World coordinate bounds for the Monza track centerline
+const MIN_X = -74;
+const MAX_X = 71;
+const MIN_Z = -137;
+const MAX_Z = 104;
 
 const SVG_W = 200;
-const SVG_H = 220;
+const SVG_H = 260;
 const PAD = 16;
 
-// SVG Path generated from the exact 136 track centerline cross-sections
+// SVG Path generated from the exact 180 spline points of Autodromo Nazionale Monza
 const TRACK_PATH =
-  "M 67.8 70.5 L 67.8 34.7 L 67.8 31.1 L 67.6 28.7 L 66.8 26.4 L 65.7 24.4 L 64.1 22.6 L 62.2 21 L 60 19.9 L 57.6 19.2 L 55 18.9 L 52.2 18.9 L 34.4 18.9 L 31.7 18.9 L 29.1 19.2 L 26.7 20 L 24.6 21.4 L 22.7 23.1 L 21.2 25.1 L 20.1 27.4 L 19.3 29.8 L 19.1 32.4 L 19.1 35.9 L 19.1 67.6 L 19.1 71.2 L 19.4 74 L 20.1 76.5 L 21.3 78.8 L 22.9 80.7 L 24.8 82.3 L 27 83.5 L 29.3 84.2 L 31.8 84.5 L 35.7 84.5 L 78.1 84.5 L 81.9 84.5 L 84.5 84.2 L 86.8 83.6 L 89 82.5 L 90.9 81 L 92.5 79.1 L 93.8 77 L 94.5 74.6 L 94.8 71.9 L 94.8 68.2 L 94.8 35.6 L 94.8 32.2 L 95 30.1 L 95.6 28.1 L 96.5 26.3 L 97.8 24.8 L 99.3 23.5 L 101.1 22.5 L 103.1 21.9 L 105.2 21.7 L 109.1 21.7 L 159.2 21.7 L 162.3 21.7 L 165.9 22 L 169.2 23 L 172.4 24.6 L 175.2 26.9 L 177.5 29.7 L 179.3 33.2 L 180.5 37.3 L 180.9 42 L 180.4 46 L 179 49.6 L 177 52.7 L 174.4 55.4 L 171.5 57.5 L 168.3 59 L 165.1 60 L 162 60.3 L 145 60.3 L 142.7 60.3 L 140.3 60.5 L 138.2 61.3 L 136.2 62.4 L 134.3 63.8 L 132.5 65.4 L 130.8 67.2 L 104.4 98.7 L 103.1 100.4 L 102 102 L 101.1 103.5 L 100.5 105.1 L 100 106.9 L 99.8 108.9 L 99.7 111.3 L 99.7 114.9 L 99.6 147.6 L 99.6 153.1 L 99.6 157 L 99.3 160.5 L 98.3 163.6 L 96.8 166.6 L 94.7 169.6 L 92 172.7 L 73.1 191.3 L 69.7 194.2 L 66.3 196.6 L 62.7 198.4 L 58.6 199.7 L 53.8 200.6 L 48.1 201 L 42 200.9 L 36.4 200 L 31.5 198.4 L 27.3 196.1 L 23.8 193.2 L 21.2 189.6 L 19.6 185.5 L 19.1 180.8 L 19.1 176.5 L 19.1 155.2 L 19.5 151.7 L 20.6 148.2 L 22.3 145 L 24.7 142.1 L 27.6 139.7 L 31.1 137.8 L 34.9 136.6 L 39.1 136.2 L 50.5 136.2 L 52.9 136.2 L 55.8 135.8 L 58.6 134.9 L 61.2 133.5 L 63.4 131.6 L 65.2 129.4 L 66.6 127 L 67.5 124.4 L 67.8 121.8 L 67.8 118.7 L 67.8 91.9 Z";
+  "M 72.8 174.0 L 74.2 171.0 L 74.7 167.7 L 74.6 164.2 L 74.4 160.9 L 73.9 157.5 L 73.5 154.2 L 73.1 150.9 L 72.8 147.5 L 72.8 144.2 L 72.8 140.9 L 72.8 137.5 L 72.8 134.2 L 72.8 130.8 L 72.8 127.5 L 72.8 124.1 L 72.8 120.8 L 72.8 117.5 L 72.8 114.0 L 72.8 110.8 L 72.7 107.4 L 72.7 104.1 L 72.7 100.7 L 72.7 97.4 L 72.6 94.0 L 72.6 90.7 L 72.7 87.4 L 72.8 83.8 L 72.9 80.7 L 73.0 77.3 L 73.2 74.0 L 73.8 70.6 L 75.0 67.5 L 76.9 64.6 L 76.9 61.4 L 74.0 59.0 L 71.5 56.4 L 72.1 53.2 L 73.0 50.0 L 73.7 46.6 L 74.6 43.3 L 75.9 40.2 L 77.8 37.2 L 80.0 34.4 L 82.4 31.7 L 85.2 29.2 L 88.3 27.1 L 91.7 25.2 L 95.3 23.6 L 99.0 22.2 L 103.0 21.2 L 107.0 20.7 L 111.0 21.0 L 115.0 21.8 L 118.8 23.1 L 122.5 24.6 L 125.9 26.5 L 128.9 28.7 L 131.5 31.3 L 133.6 34.1 L 135.3 37.2 L 136.8 40.3 L 137.7 43.6 L 138.2 46.9 L 138.4 50.2 L 138.6 53.6 L 138.9 56.8 L 139.3 60.2 L 139.6 63.6 L 139.9 66.9 L 140.0 70.2 L 140.0 73.6 L 139.8 76.9 L 139.5 80.3 L 138.9 83.6 L 137.7 86.8 L 135.4 89.5 L 132.6 91.9 L 132.6 95.0 L 135.6 97.3 L 138.5 99.7 L 139.6 102.9 L 139.7 106.2 L 140.3 109.5 L 140.9 112.8 L 141.8 116.1 L 143.5 119.2 L 146.2 121.6 L 149.6 123.5 L 153.4 124.7 L 157.4 124.6 L 161.3 123.5 L 165.3 122.8 L 169.2 123.8 L 172.3 125.9 L 174.7 128.6 L 176.2 131.7 L 177.0 135.0 L 177.2 138.4 L 176.7 141.7 L 175.6 144.9 L 174.0 148.0 L 172.4 151.0 L 170.8 154.1 L 169.2 157.2 L 167.6 160.3 L 166.0 163.3 L 164.3 166.4 L 162.6 169.4 L 160.9 172.5 L 159.2 175.5 L 157.6 178.6 L 156.1 181.7 L 155.0 184.9 L 154.0 188.1 L 153.1 191.4 L 152.2 194.7 L 151.2 197.9 L 150.3 201.2 L 149.4 204.5 L 148.2 207.7 L 146.4 210.6 L 143.4 212.9 L 140.0 214.9 L 137.6 217.5 L 139.2 220.5 L 141.7 223.2 L 141.8 226.4 L 139.4 229.1 L 136.3 231.3 L 133.0 233.3 L 129.3 234.8 L 125.5 235.8 L 121.6 236.6 L 117.5 237.2 L 113.4 237.6 L 109.3 237.9 L 105.2 238.2 L 101.2 238.3 L 97.1 238.5 L 93.0 238.6 L 88.9 238.6 L 84.8 238.5 L 80.7 238.5 L 76.6 238.3 L 72.5 238.2 L 68.4 238.1 L 64.3 237.9 L 60.2 237.7 L 56.1 237.4 L 52.0 236.8 L 48.1 236.1 L 44.1 235.3 L 40.2 234.4 L 36.4 233.1 L 33.0 231.3 L 30.1 229.0 L 27.7 226.3 L 25.7 223.3 L 24.2 220.2 L 23.1 217.0 L 22.5 213.7 L 22.3 210.3 L 22.5 207.0 L 23.1 203.7 L 24.1 200.4 L 25.5 197.2 L 27.4 194.4 L 29.8 191.6 L 32.5 189.2 L 35.6 186.9 L 38.8 184.9 L 42.4 183.3 L 46.2 182.0 L 50.1 180.9 L 53.9 179.8 L 57.8 178.7 L 61.7 177.8 L 65.8 177.1 L 69.6 176.1 L 72.8 174.0 Z";
 
-// Start line coordinates on SVG: x = -11.28, z = 0
+// Start line coordinates on SVG: x = -25, z = 10
 const START_LINE_SVG = {
-  x: PAD + ((-11.28 - MIN_X) / (MAX_X - MIN_X)) * (SVG_W - 2 * PAD),
-  y: PAD + ((0 - MIN_Z) / (MAX_Z - MIN_Z)) * (SVG_H - 2 * PAD),
+  x: 72.8,
+  y: 155.1,
 };
 
 type MinimapProps = {
@@ -114,13 +114,15 @@ export default function Minimap({ pose, visible, onToggle, onReset }: MinimapPro
           justifyContent: "space-between",
           alignItems: "center",
           padding: "8px 12px 4px 12px",
-          color: "rgba(255,255,255,0.85)",
+          color: "rgba(255,255,255,0.9)",
           fontSize: 11,
           fontWeight: 700,
           letterSpacing: 0.8,
         }}
       >
-        <span>TRACK RADAR</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ color: "#d82424" }}>●</span> MONZA RADAR
+        </span>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           {onReset && (
             <button
@@ -163,7 +165,7 @@ export default function Minimap({ pose, visible, onToggle, onReset }: MinimapPro
           style={{
             width: "100%",
             height: "auto",
-            maxHeight: 190,
+            maxHeight: 220,
             overflow: "visible",
           }}
         >
@@ -215,6 +217,13 @@ export default function Minimap({ pose, visible, onToggle, onReset }: MinimapPro
             strokeDasharray="4 5"
             strokeLinejoin="round"
           />
+
+          {/* Corner labels */}
+          <text x="108" y="14" fill="rgba(255,255,255,0.5)" fontSize="8" fontWeight="600" textAnchor="middle">Curva Grande</text>
+          <text x="180" y="120" fill="rgba(255,255,255,0.5)" fontSize="8" fontWeight="600" textAnchor="start">Lesmo</text>
+          <text x="156" y="240" fill="rgba(255,255,255,0.5)" fontSize="8" fontWeight="600" textAnchor="middle">Ascari</text>
+          <text x="16" y="196" fill="rgba(255,255,255,0.5)" fontSize="8" fontWeight="600" textAnchor="end">Parabolica</text>
+          <text x="50" y="60" fill="rgba(255,255,255,0.5)" fontSize="8" fontWeight="600" textAnchor="end">Rettifilo</text>
 
           {/* Start / Finish line bar */}
           <line

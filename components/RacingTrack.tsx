@@ -3,26 +3,25 @@
 import { useMemo, useRef } from "react";
 import type { MutableRefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import type { CarPose } from "@/components/ToyCarSmoke";
 
-/* ---------- Track layout & coordinates ---------- */
+/* ---------- Monza Circuit Layout & Coordinates ---------- */
 
-/** Center of the start/finish straight on the asphalt */
+/** Starting grid position on Monza's Rettifilo Tribune (Main Straight) */
 export const TRACK_START = {
-  x: -11.28,
-  z: 6.0,
+  x: -25.0,
+  z: 10.0,
   y: 0.02,
-  yaw: Math.PI, // Facing forward along -z into turn 1
+  yaw: Math.PI, // Facing forward along -z into Turn 1 (Variante del Rettifilo)
 };
 
-/** Entire racing circuit world bounds */
+/** Entire Monza circuit driving bounds */
 export const TRACK_BOUNDS = {
-  minX: -110,
-  maxX: 90,
-  minZ: -115,
-  maxZ: 105,
+  minX: -95,
+  maxX: 95,
+  minZ: -160,
+  maxZ: 130,
 };
 
 export const flatGround = () => 0.02;
@@ -46,7 +45,7 @@ function createCheckeredTexture(): THREE.CanvasTexture {
     }
   }
 
-  // Subtle border lines
+  // Border lines
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, canvas.width, 3);
   ctx.fillRect(0, canvas.height - 3, canvas.width, 3);
@@ -65,7 +64,7 @@ function createTrackTexture(): THREE.CanvasTexture {
   canvas.height = 512;
   const ctx = canvas.getContext("2d")!;
 
-  // 1. Dark asphalt base in the center
+  // Dark asphalt base in the center
   ctx.fillStyle = "#2c282e";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -82,9 +81,9 @@ function createTrackTexture(): THREE.CanvasTexture {
   const halfW = canvas.width / 2; // 64px red, 64px white
 
   // Top curb (V: 0 to ~0.09): Red / White alternating pavement blocks
-  ctx.fillStyle = "#d82424"; // Racing Red
+  ctx.fillStyle = "#d82424"; // Monza Racing Red
   ctx.fillRect(0, 0, halfW, curbHeight);
-  ctx.fillStyle = "#f5f5f5"; // Racing White
+  ctx.fillStyle = "#f5f5f5"; // Monza White
   ctx.fillRect(halfW, 0, halfW, curbHeight);
 
   // Top curb inner edge / boundary line
@@ -114,17 +113,136 @@ function createTrackTexture(): THREE.CanvasTexture {
   return tex;
 }
 
-/* ---------- Racing Track Component ---------- */
+/* ---------- Procedural Monza Geometry Generator ---------- */
+
+export function buildMonzaGeometry() {
+  // Key control waypoints representing the iconic Autodromo Nazionale Monza corners
+  const points = [
+    // 1. Rettifilo Tribune (Main Straight)
+    new THREE.Vector3(-25, 0.02, 30),
+    new THREE.Vector3(-25, 0.02, 0),
+    new THREE.Vector3(-25, 0.02, -35),
+    new THREE.Vector3(-25, 0.02, -65),
+
+    // 2. Variante del Rettifilo (Turns 1 & 2 Chicane: right then left)
+    new THREE.Vector3(-24, 0.02, -80),
+    new THREE.Vector3(-21, 0.02, -88),
+    new THREE.Vector3(-26, 0.02, -94),
+    new THREE.Vector3(-25, 0.02, -100),
+
+    // 3. Curva Grande / Biassono (Turn 3: fast sweeping right)
+    new THREE.Vector3(-22, 0.02, -112),
+    new THREE.Vector3(-12, 0.02, -125),
+    new THREE.Vector3(5, 0.02, -132),
+    new THREE.Vector3(22, 0.02, -125),
+    new THREE.Vector3(30, 0.02, -112),
+
+    // Run down to Roggia
+    new THREE.Vector3(32, 0.02, -95),
+    new THREE.Vector3(33, 0.02, -75),
+
+    // 4. Variante della Roggia (Turns 4 & 5 Chicane: left then right)
+    new THREE.Vector3(31, 0.02, -62),
+    new THREE.Vector3(26, 0.02, -55),
+    new THREE.Vector3(32, 0.02, -48),
+    new THREE.Vector3(33, 0.02, -40),
+
+    // 5. Curva di Lesmo 1 (Turn 6: 90 deg right)
+    new THREE.Vector3(36, 0.02, -28),
+    new THREE.Vector3(45, 0.02, -22),
+    new THREE.Vector3(56, 0.02, -24),
+
+    // 6. Curva di Lesmo 2 (Turn 7: tight right leading to back stretch)
+    new THREE.Vector3(63, 0.02, -18),
+    new THREE.Vector3(65, 0.02, -6),
+    new THREE.Vector3(60, 0.02, 8),
+
+    // 7. Curva del Serraglio & Straight towards Ascari
+    new THREE.Vector3(54, 0.02, 22),
+    new THREE.Vector3(47, 0.02, 38),
+    new THREE.Vector3(43, 0.02, 54),
+
+    // 8. Variante Ascari (Turns 8, 9 & 10: fast left, right, left)
+    new THREE.Vector3(39, 0.02, 68),
+    new THREE.Vector3(31, 0.02, 76),
+    new THREE.Vector3(35, 0.02, 84),
+    new THREE.Vector3(28, 0.02, 92),
+    new THREE.Vector3(18, 0.02, 96),
+
+    // 9. Rettifilo Posteriore (Back Straight)
+    new THREE.Vector3(0, 0.02, 98),
+    new THREE.Vector3(-22, 0.02, 98),
+    new THREE.Vector3(-45, 0.02, 96),
+
+    // 10. Curva Parabolica / Alboreto (Turn 11: iconic 180 deg opening right carousel)
+    new THREE.Vector3(-60, 0.02, 90),
+    new THREE.Vector3(-68, 0.02, 75),
+    new THREE.Vector3(-66, 0.02, 55),
+    new THREE.Vector3(-55, 0.02, 42),
+    new THREE.Vector3(-38, 0.02, 35),
+  ];
+
+  const curve = new THREE.CatmullRomCurve3(points, true, "centripetal", 0.5);
+  const SAMPLES = 320;
+  const TRACK_WIDTH = 9.5;
+  const STRIPE_PERIOD = 3.2;
+
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+
+  const pts = curve.getSpacedPoints(SAMPLES);
+  let cumulativeDist = 0;
+
+  for (let i = 0; i <= SAMPLES; i++) {
+    const t = i / SAMPLES;
+    const p = pts[i % SAMPLES];
+    const tangent = curve.getTangentAt(t % 1).normalize();
+    const norm = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+
+    if (i > 0) {
+      const prevP = pts[(i - 1) % SAMPLES];
+      cumulativeDist += p.distanceTo(prevP);
+    }
+
+    const u = cumulativeDist / STRIPE_PERIOD;
+    const halfW = TRACK_WIDTH / 2;
+
+    // Left vertex (v = 0)
+    positions.push(p.x + norm.x * halfW, p.y, p.z + norm.z * halfW);
+    normals.push(0, 1, 0);
+    uvs.push(u, 0.0);
+
+    // Right vertex (v = 1)
+    positions.push(p.x - norm.x * halfW, p.y, p.z - norm.z * halfW);
+    normals.push(0, 1, 0);
+    uvs.push(u, 1.0);
+
+    if (i < SAMPLES) {
+      const row1 = i * 2;
+      const row2 = (i + 1) * 2;
+      indices.push(row1, row1 + 1, row2);
+      indices.push(row1 + 1, row2 + 1, row2);
+    }
+  }
+
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geom.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
+  geom.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geom.setIndex(indices);
+  return geom;
+}
+
+/* ---------- Racing Track Component (Monza Circuit) ---------- */
 
 type RacingTrackProps = {
   showCurbs?: boolean;
 };
 
 export function RacingTrack({ showCurbs = true }: RacingTrackProps) {
-  // Load track model from folio-2025
-  const scenery = useGLTF("/models/scenery.glb");
-
-  // Track material with red & white curbs on edges and dark asphalt in center
+  // Monza track material with red & white curbs
   const trackMaterial = useMemo(() => {
     const tex = createTrackTexture();
     return new THREE.MeshStandardMaterial({
@@ -135,7 +253,7 @@ export function RacingTrack({ showCurbs = true }: RacingTrackProps) {
     });
   }, []);
 
-  // Plain dark asphalt material when curbs are toggled off
+  // Plain asphalt material when curbs are toggled off
   const plainAsphaltMaterial = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
@@ -160,85 +278,56 @@ export function RacingTrack({ showCurbs = true }: RacingTrackProps) {
     });
   }, []);
 
-  // Extract and UV-map the road surface mesh (refRoad) from scenery.glb
-  const roadMesh = useMemo(() => {
-    const original = scenery.scene.getObjectByName("refRoad") as THREE.Mesh | null;
-    if (!original) return null;
-
-    const clone = original.clone();
-    const geom = original.geometry.clone();
-    const pos = geom.attributes.position;
-    const numPairs = pos.count / 2;
-
-    // Calculate physical arc length along the track to accurately map the red & white curbs
-    const dists: number[] = [0];
-    let total = 0;
-    for (let k = 1; k < numPairs; k++) {
-      const x0 = pos.getX(2 * (k - 1)), z0 = pos.getZ(2 * (k - 1));
-      const x1 = pos.getX(2 * (k - 1) + 1), z1 = pos.getZ(2 * (k - 1) + 1);
-      const cxPrev = (x0 + x1) / 2, czPrev = (z0 + z1) / 2;
-
-      const x2 = pos.getX(2 * k), z2 = pos.getZ(2 * k);
-      const x3 = pos.getX(2 * k + 1), z3 = pos.getZ(2 * k + 1);
-      const cxCurr = (x2 + x3) / 2, czCurr = (z2 + z3) / 2;
-
-      total += Math.hypot(cxCurr - cxPrev, czCurr - czPrev);
-      dists.push(total);
-    }
-
-    // Period of 1 red + 1 white stripe (3.2 units total: 1.6 units red, 1.6 units white)
-    const STRIPE_PERIOD = 3.2;
-    const uvAttr = geom.attributes.uv;
-    for (let k = 0; k < numPairs; k++) {
-      const u = dists[k] / STRIPE_PERIOD;
-      uvAttr.setXY(2 * k, u, 0.0);
-      uvAttr.setXY(2 * k + 1, u, 1.0);
-    }
-    uvAttr.needsUpdate = true;
-
-    clone.geometry = geom;
-    clone.material = showCurbs ? trackMaterial : plainAsphaltMaterial;
-    clone.receiveShadow = true;
-    clone.castShadow = false;
-    // World translation in folio-2025: [-45.327175, 0.02, 35.990040]
-    clone.position.set(-45.327175, 0.02, 35.99004);
-    return clone;
-  }, [scenery, showCurbs, trackMaterial, plainAsphaltMaterial]);
+  // Procedural Monza circuit ribbon mesh
+  const monzaGeometry = useMemo(() => buildMonzaGeometry(), []);
 
   return (
     <group>
-      {/* Surrounding landscape ground plane */}
+      {/* Monza Royal Park landscape ground plane */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-        <planeGeometry args={[600, 600]} />
-        <meshStandardMaterial color="#7ea560" roughness={0.92} metalness={0.02} />
+        <planeGeometry args={[700, 700]} />
+        <meshStandardMaterial color="#6e9a4f" roughness={0.92} metalness={0.02} />
       </mesh>
 
-      {/* Outer landscape subtle border/skirt */}
+      {/* Outer landscape border */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]}>
-        <planeGeometry args={[1200, 1200]} />
-        <meshStandardMaterial color="#68884f" roughness={1} />
+        <planeGeometry args={[1400, 1400]} />
+        <meshStandardMaterial color="#557a3e" roughness={1} />
       </mesh>
 
-      {/* The Asphalt Road Ribbon with Flat Red & White Pavement Curbs */}
-      {roadMesh && <primitive object={roadMesh} />}
+      {/* Monza Asphalt Road Ribbon with Flat Red & White Pavement Curbs */}
+      <mesh
+        geometry={monzaGeometry}
+        material={showCurbs ? trackMaterial : plainAsphaltMaterial}
+        receiveShadow
+      />
 
-      {/* Checkered Start / Finish Line across the straight (width 10, depth 1.6) */}
+      {/* Checkered Start / Finish Line on the Rettifilo Straight */}
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
-        position={[-11.28, 0.024, 0.0]}
+        position={[-25.0, 0.024, 0.0]}
         material={startLineMaterial}
         receiveShadow
       >
-        <planeGeometry args={[10.0, 1.6]} />
+        <planeGeometry args={[9.5, 1.8]} />
       </mesh>
+
+      {/* Starting Grid Line markings along the straight */}
+      {[-8, -16, -24, -32].map((z, idx) => (
+        <mesh
+          key={z}
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[-25.0 + (idx % 2 === 0 ? 2.2 : -2.2), 0.023, z]}
+        >
+          <planeGeometry args={[2.5, 0.25]} />
+          <meshBasicMaterial color="#ffffff" opacity={0.7} transparent />
+        </mesh>
+      ))}
     </group>
   );
 }
 
-// Preload the track GLB asset
-useGLTF.preload("/models/scenery.glb");
-
-/* ---------- Top-Down Isometric Camera (Bruno Simon Folio-2025 style) ---------- */
+/* ---------- Top-Down Isometric Camera (Bruno Simon Folio style) ---------- */
 
 export function FolioTopDownCam({
   pose,
@@ -265,19 +354,16 @@ export function FolioTopDownCam({
       s.smoothedTarget.copy(target);
       s.ready = true;
     } else {
-      // Smooth camera translation
       s.smoothedTarget.lerp(target, 1 - Math.exp(-6.5 * dt));
     }
 
-    // Dynamic zoom based on driving speed, matching Bruno Simon's folio
+    // Dynamic zoom based on driving speed
     const baseRadius = 26 * zoomMultiplier;
     const speedZoom = Math.min(12, Math.abs(p.speed) * 0.45);
     const targetRadius = baseRadius + speedZoom;
     s.currentRadius += (targetRadius - s.currentRadius) * (1 - Math.exp(-3.5 * dt));
 
-    // Bruno Simon's exact spherical projection angles:
-    // phi = 0.27 * PI (~48.6° from +Y, or ~41.4° pitch above the ground)
-    // theta = 0.25 * PI (45° azimuth, corner top-down perspective)
+    // Bruno Simon's spherical angles
     const phi = Math.PI * 0.27;
     const theta = Math.PI * 0.25;
 

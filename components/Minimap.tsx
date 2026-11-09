@@ -218,14 +218,6 @@ export default function Minimap({ pose, visible, onToggle, onReset }: MinimapPro
             strokeLinejoin="round"
           />
 
-          {/* Corner labels matching 500gt3.com */}
-          <text x="32" y="14" fill="rgba(255,255,255,0.5)" fontSize="7.5" fontWeight="600" textAnchor="middle">Lesmo (6-7)</text>
-          <text x="14" y="55" fill="rgba(255,255,255,0.5)" fontSize="7.5" fontWeight="600" textAnchor="end">Roggia (4-5)</text>
-          <text x="35" y="126" fill="rgba(255,255,255,0.5)" fontSize="7.5" fontWeight="600" textAnchor="middle">Curva Grande (3)</text>
-          <text x="96" y="133" fill="rgba(255,255,255,0.5)" fontSize="7.5" fontWeight="600" textAnchor="middle">Rettifilo (1-2)</text>
-          <text x="110" y="74" fill="rgba(255,255,255,0.5)" fontSize="7.5" fontWeight="600" textAnchor="middle">Ascari (8-10)</text>
-          <text x="228" y="86" fill="rgba(255,255,255,0.5)" fontSize="7.5" fontWeight="600" textAnchor="middle">Parabolica (11)</text>
-
           {/* Start / Finish line bar */}
           <line
             x1={START_LINE_SVG.x}
@@ -239,15 +231,45 @@ export default function Minimap({ pose, visible, onToggle, onReset }: MinimapPro
 
           {/* Real-time Player Car Marker */}
           <g ref={markerRef} filter="url(#carGlow)">
-            {/* Player vehicle arrow */}
-            <polygon
-              points="0,-7 5,6 0,3.5 -5,6"
+            {/* Pulsing radar target ring */}
+            <circle
+              r="9.5"
+              fill="rgba(255, 122, 26, 0.22)"
+              stroke="#ff7a1a"
+              strokeWidth="0.8"
+              strokeDasharray="2.5 2"
+            />
+
+            {/* Wheels */}
+            {/* Front Left */}
+            <rect x="-5.2" y="-6.5" width="2" height="4" rx="0.8" fill="#141216" stroke="#ffffff" strokeWidth="0.4" />
+            {/* Front Right */}
+            <rect x="3.2" y="-6.5" width="2" height="4" rx="0.8" fill="#141216" stroke="#ffffff" strokeWidth="0.4" />
+            {/* Rear Left */}
+            <rect x="-5.5" y="2.5" width="2.2" height="4.5" rx="0.8" fill="#141216" stroke="#ffffff" strokeWidth="0.4" />
+            {/* Rear Right */}
+            <rect x="3.3" y="2.5" width="2.2" height="4.5" rx="0.8" fill="#141216" stroke="#ffffff" strokeWidth="0.4" />
+
+            {/* Car Chassis Body */}
+            <path
+              d="M 0 -8.5 L 2.8 -4 L 3.4 3.5 L 3.8 7 L -3.8 7 L -3.4 3.5 L -2.8 -4 Z"
               fill="#ff7a1a"
               stroke="#ffffff"
-              strokeWidth="1"
+              strokeWidth="0.8"
+              strokeLinejoin="round"
             />
-            {/* Center dot */}
-            <circle r="1.5" fill="#ffffff" />
+
+            {/* Rear Spoiler / Wing */}
+            <rect x="-5.2" y="6.6" width="10.4" height="1.6" rx="0.5" fill="#ffffff" stroke="#ff7a1a" strokeWidth="0.5" />
+
+            {/* Twin Headlights */}
+            <circle cx="-1.6" cy="-7.5" r="0.6" fill="#ffff99" />
+            <circle cx="1.6" cy="-7.5" r="0.6" fill="#ffff99" />
+
+            {/* Cockpit Canopy */}
+            <ellipse cx="0" cy="0" rx="1.6" ry="2.2" fill="#1a1820" stroke="#60a5fa" strokeWidth="0.5" />
+            {/* Helmet Dot */}
+            <circle cx="0" cy="-0.2" r="0.9" fill="#ffffff" />
           </g>
         </svg>
       </div>

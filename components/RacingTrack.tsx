@@ -8,20 +8,20 @@ import type { CarPose } from "@/components/ToyCarSmoke";
 
 /* ---------- Monza Circuit Layout & Coordinates ---------- */
 
-/** Starting grid position on Monza's Rettifilo Tribune (Main Straight) */
+/** Starting grid position on Monza's Rettifilo Tribune (Main Straight heading West) */
 export const TRACK_START = {
-  x: -25.0,
-  z: 10.0,
+  x: 13.08,
+  z: 41.27,
   y: 0.02,
-  yaw: Math.PI, // Facing forward along -z into Turn 1 (Variante del Rettifilo)
+  yaw: -Math.PI / 2, // Facing West along -x towards Turn 1 (Variante del Rettifilo)
 };
 
 /** Entire Monza circuit driving bounds */
 export const TRACK_BOUNDS = {
-  minX: -95,
-  maxX: 95,
-  minZ: -160,
-  maxZ: 130,
+  minX: -105,
+  maxX: 105,
+  minZ: -60,
+  maxZ: 60,
 };
 
 export const flatGround = () => 0.02;
@@ -116,70 +116,75 @@ function createTrackTexture(): THREE.CanvasTexture {
 /* ---------- Procedural Monza Geometry Generator ---------- */
 
 export function buildMonzaGeometry() {
-  // Key control waypoints representing the iconic Autodromo Nazionale Monza corners
+  // Key control waypoints representing the iconic Autodromo Nazionale Monza corners (500gt3.com layout)
   const points = [
-    // 1. Rettifilo Tribune (Main Straight)
-    new THREE.Vector3(-25, 0.02, 30),
-    new THREE.Vector3(-25, 0.02, 0),
-    new THREE.Vector3(-25, 0.02, -35),
-    new THREE.Vector3(-25, 0.02, -65),
+    // 1. Rettifilo Tribune (Main Straight heading West)
+    new THREE.Vector3(13.08, 0.02, 41.27),
+    new THREE.Vector3(4.90, 0.02, 41.27),
+    new THREE.Vector3(-4.09, 0.02, 41.27),
+    new THREE.Vector3(-13.08, 0.02, 41.27),
 
-    // 2. Variante del Rettifilo (Turns 1 & 2 Chicane: right then left)
-    new THREE.Vector3(-24, 0.02, -80),
-    new THREE.Vector3(-21, 0.02, -88),
-    new THREE.Vector3(-26, 0.02, -94),
-    new THREE.Vector3(-25, 0.02, -100),
+    // 2. Turns 1 & 2: Variante del Rettifilo Chicane
+    new THREE.Vector3(-21.25, 0.02, 38.82),
+    new THREE.Vector3(-30.24, 0.02, 41.27),
+    new THREE.Vector3(-39.23, 0.02, 42.09),
+    new THREE.Vector3(-48.22, 0.02, 41.27),
 
-    // 3. Curva Grande / Biassono (Turn 3: fast sweeping right)
-    new THREE.Vector3(-22, 0.02, -112),
-    new THREE.Vector3(-12, 0.02, -125),
-    new THREE.Vector3(5, 0.02, -132),
-    new THREE.Vector3(22, 0.02, -125),
-    new THREE.Vector3(30, 0.02, -112),
+    // 3. Turn 3: Curva Grande (Biassono) sweeping up towards North-West
+    new THREE.Vector3(-56.39, 0.02, 38.00),
+    new THREE.Vector3(-64.57, 0.02, 29.83),
+    new THREE.Vector3(-67.84, 0.02, 20.84),
+    new THREE.Vector3(-69.47, 0.02, 12.67),
+    new THREE.Vector3(-71.11, 0.02, 3.68),
+    new THREE.Vector3(-71.92, 0.02, -5.31),
 
-    // Run down to Roggia
-    new THREE.Vector3(32, 0.02, -95),
-    new THREE.Vector3(33, 0.02, -75),
+    // 4. Turns 4 & 5: Variante della Roggia Chicane
+    new THREE.Vector3(-76.83, 0.02, -13.49),
+    new THREE.Vector3(-80.91, 0.02, -21.66),
+    new THREE.Vector3(-85.00, 0.02, -30.65),
 
-    // 4. Variante della Roggia (Turns 4 & 5 Chicane: left then right)
-    new THREE.Vector3(31, 0.02, -62),
-    new THREE.Vector3(26, 0.02, -55),
-    new THREE.Vector3(32, 0.02, -48),
-    new THREE.Vector3(33, 0.02, -40),
+    // 5. Turns 6 & 7: Curve di Lesmo 1 & 2 (Top Left)
+    new THREE.Vector3(-81.73, 0.02, -38.82),
+    new THREE.Vector3(-72.74, 0.02, -40.46),
+    new THREE.Vector3(-64.57, 0.02, -42.09),
 
-    // 5. Curva di Lesmo 1 (Turn 6: 90 deg right)
-    new THREE.Vector3(36, 0.02, -28),
-    new THREE.Vector3(45, 0.02, -22),
-    new THREE.Vector3(56, 0.02, -24),
+    // 6. Curva del Serraglio & Straight towards Ascari (sloping down-right)
+    new THREE.Vector3(-57.21, 0.02, -37.19),
+    new THREE.Vector3(-51.49, 0.02, -29.01),
+    new THREE.Vector3(-46.59, 0.02, -20.84),
+    new THREE.Vector3(-39.23, 0.02, -13.49),
+    new THREE.Vector3(-33.51, 0.02, -8.58),
+    new THREE.Vector3(-25.34, 0.02, -0.41),
 
-    // 6. Curva di Lesmo 2 (Turn 7: tight right leading to back stretch)
-    new THREE.Vector3(63, 0.02, -18),
-    new THREE.Vector3(65, 0.02, -6),
-    new THREE.Vector3(60, 0.02, 8),
+    // 7. Turns 8, 9 & 10: Variante Ascari
+    new THREE.Vector3(-17.98, 0.02, 6.13),
+    new THREE.Vector3(-12.26, 0.02, 11.03),
+    new THREE.Vector3(-3.27, 0.02, 15.94),
+    new THREE.Vector3(4.90, 0.02, 18.39),
 
-    // 7. Curva del Serraglio & Straight towards Ascari
-    new THREE.Vector3(54, 0.02, 22),
-    new THREE.Vector3(47, 0.02, 38),
-    new THREE.Vector3(43, 0.02, 54),
+    // 8. Rettifilo Posteriore (Back Straight heading East)
+    new THREE.Vector3(13.89, 0.02, 20.02),
+    new THREE.Vector3(22.88, 0.02, 20.02),
+    new THREE.Vector3(31.88, 0.02, 20.02),
+    new THREE.Vector3(40.05, 0.02, 20.02),
+    new THREE.Vector3(49.04, 0.02, 20.02),
+    new THREE.Vector3(58.03, 0.02, 20.02),
+    new THREE.Vector3(67.02, 0.02, 20.02),
+    new THREE.Vector3(75.19, 0.02, 20.02),
 
-    // 8. Variante Ascari (Turns 8, 9 & 10: fast left, right, left)
-    new THREE.Vector3(39, 0.02, 68),
-    new THREE.Vector3(31, 0.02, 76),
-    new THREE.Vector3(35, 0.02, 84),
-    new THREE.Vector3(28, 0.02, 92),
-    new THREE.Vector3(18, 0.02, 96),
+    // 9. Turn 11: Curva Parabolica (Alboreto - 180° opening right carousel)
+    new THREE.Vector3(84.18, 0.02, 21.66),
+    new THREE.Vector3(85.00, 0.02, 30.65),
+    new THREE.Vector3(77.64, 0.02, 36.37),
+    new THREE.Vector3(68.65, 0.02, 39.64),
 
-    // 9. Rettifilo Posteriore (Back Straight)
-    new THREE.Vector3(0, 0.02, 98),
-    new THREE.Vector3(-22, 0.02, 98),
-    new THREE.Vector3(-45, 0.02, 96),
-
-    // 10. Curva Parabolica / Alboreto (Turn 11: iconic 180 deg opening right carousel)
-    new THREE.Vector3(-60, 0.02, 90),
-    new THREE.Vector3(-68, 0.02, 75),
-    new THREE.Vector3(-66, 0.02, 55),
-    new THREE.Vector3(-55, 0.02, 42),
-    new THREE.Vector3(-38, 0.02, 35),
+    // 10. Main Straight run back to Start / Finish line
+    new THREE.Vector3(59.66, 0.02, 40.46),
+    new THREE.Vector3(50.67, 0.02, 40.46),
+    new THREE.Vector3(42.50, 0.02, 40.46),
+    new THREE.Vector3(33.51, 0.02, 40.46),
+    new THREE.Vector3(22.88, 0.02, 41.27),
+    new THREE.Vector3(13.89, 0.02, 41.27),
   ];
 
   const curve = new THREE.CatmullRomCurve3(points, true, "centripetal", 0.5);
@@ -304,20 +309,20 @@ export function RacingTrack({ showCurbs = true }: RacingTrackProps) {
 
       {/* Checkered Start / Finish Line on the Rettifilo Straight */}
       <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[-25.0, 0.024, 0.0]}
+        rotation={[-Math.PI / 2, 0, Math.PI / 2]}
+        position={[13.08, 0.024, 41.27]}
         material={startLineMaterial}
         receiveShadow
       >
         <planeGeometry args={[9.5, 1.8]} />
       </mesh>
 
-      {/* Starting Grid Line markings along the straight */}
-      {[-8, -16, -24, -32].map((z, idx) => (
+      {/* Starting Grid Line markings along the straight heading West */}
+      {[5, -3, -11, -19].map((x, idx) => (
         <mesh
-          key={z}
-          rotation={[-Math.PI / 2, 0, 0]}
-          position={[-25.0 + (idx % 2 === 0 ? 2.2 : -2.2), 0.023, z]}
+          key={x}
+          rotation={[-Math.PI / 2, 0, Math.PI / 2]}
+          position={[x, 0.023, 41.27 + (idx % 2 === 0 ? 2.2 : -2.2)]}
         >
           <planeGeometry args={[2.5, 0.25]} />
           <meshBasicMaterial color="#ffffff" opacity={0.7} transparent />

@@ -4,24 +4,24 @@ import { useEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
 import type { CarPose } from "@/components/ToyCarSmoke";
 
-// World coordinate bounds for the Monza track centerline
-const MIN_X = -74;
-const MAX_X = 71;
-const MIN_Z = -137;
-const MAX_Z = 104;
+// World coordinate bounds for the Monza track centerline (500gt3.com layout)
+const MIN_X = -90;
+const MAX_X = 91;
+const MIN_Z = -48;
+const MAX_Z = 48;
 
-const SVG_W = 200;
-const SVG_H = 260;
-const PAD = 16;
+const SVG_W = 240;
+const SVG_H = 140;
+const PAD = 14;
 
 // SVG Path generated from the exact 180 spline points of Autodromo Nazionale Monza
 const TRACK_PATH =
-  "M 72.8 174.0 L 74.2 171.0 L 74.7 167.7 L 74.6 164.2 L 74.4 160.9 L 73.9 157.5 L 73.5 154.2 L 73.1 150.9 L 72.8 147.5 L 72.8 144.2 L 72.8 140.9 L 72.8 137.5 L 72.8 134.2 L 72.8 130.8 L 72.8 127.5 L 72.8 124.1 L 72.8 120.8 L 72.8 117.5 L 72.8 114.0 L 72.8 110.8 L 72.7 107.4 L 72.7 104.1 L 72.7 100.7 L 72.7 97.4 L 72.6 94.0 L 72.6 90.7 L 72.7 87.4 L 72.8 83.8 L 72.9 80.7 L 73.0 77.3 L 73.2 74.0 L 73.8 70.6 L 75.0 67.5 L 76.9 64.6 L 76.9 61.4 L 74.0 59.0 L 71.5 56.4 L 72.1 53.2 L 73.0 50.0 L 73.7 46.6 L 74.6 43.3 L 75.9 40.2 L 77.8 37.2 L 80.0 34.4 L 82.4 31.7 L 85.2 29.2 L 88.3 27.1 L 91.7 25.2 L 95.3 23.6 L 99.0 22.2 L 103.0 21.2 L 107.0 20.7 L 111.0 21.0 L 115.0 21.8 L 118.8 23.1 L 122.5 24.6 L 125.9 26.5 L 128.9 28.7 L 131.5 31.3 L 133.6 34.1 L 135.3 37.2 L 136.8 40.3 L 137.7 43.6 L 138.2 46.9 L 138.4 50.2 L 138.6 53.6 L 138.9 56.8 L 139.3 60.2 L 139.6 63.6 L 139.9 66.9 L 140.0 70.2 L 140.0 73.6 L 139.8 76.9 L 139.5 80.3 L 138.9 83.6 L 137.7 86.8 L 135.4 89.5 L 132.6 91.9 L 132.6 95.0 L 135.6 97.3 L 138.5 99.7 L 139.6 102.9 L 139.7 106.2 L 140.3 109.5 L 140.9 112.8 L 141.8 116.1 L 143.5 119.2 L 146.2 121.6 L 149.6 123.5 L 153.4 124.7 L 157.4 124.6 L 161.3 123.5 L 165.3 122.8 L 169.2 123.8 L 172.3 125.9 L 174.7 128.6 L 176.2 131.7 L 177.0 135.0 L 177.2 138.4 L 176.7 141.7 L 175.6 144.9 L 174.0 148.0 L 172.4 151.0 L 170.8 154.1 L 169.2 157.2 L 167.6 160.3 L 166.0 163.3 L 164.3 166.4 L 162.6 169.4 L 160.9 172.5 L 159.2 175.5 L 157.6 178.6 L 156.1 181.7 L 155.0 184.9 L 154.0 188.1 L 153.1 191.4 L 152.2 194.7 L 151.2 197.9 L 150.3 201.2 L 149.4 204.5 L 148.2 207.7 L 146.4 210.6 L 143.4 212.9 L 140.0 214.9 L 137.6 217.5 L 139.2 220.5 L 141.7 223.2 L 141.8 226.4 L 139.4 229.1 L 136.3 231.3 L 133.0 233.3 L 129.3 234.8 L 125.5 235.8 L 121.6 236.6 L 117.5 237.2 L 113.4 237.6 L 109.3 237.9 L 105.2 238.2 L 101.2 238.3 L 97.1 238.5 L 93.0 238.6 L 88.9 238.6 L 84.8 238.5 L 80.7 238.5 L 76.6 238.3 L 72.5 238.2 L 68.4 238.1 L 64.3 237.9 L 60.2 237.7 L 56.1 237.4 L 52.0 236.8 L 48.1 236.1 L 44.1 235.3 L 40.2 234.4 L 36.4 233.1 L 33.0 231.3 L 30.1 229.0 L 27.7 226.3 L 25.7 223.3 L 24.2 220.2 L 23.1 217.0 L 22.5 213.7 L 22.3 210.3 L 22.5 207.0 L 23.1 203.7 L 24.1 200.4 L 25.5 197.2 L 27.4 194.4 L 29.8 191.6 L 32.5 189.2 L 35.6 186.9 L 38.8 184.9 L 42.4 183.3 L 46.2 182.0 L 50.1 180.9 L 53.9 179.8 L 57.8 178.7 L 61.7 177.8 L 65.8 177.1 L 69.6 176.1 L 72.8 174.0 Z";
+  "M 134.7 118.1 L 132.0 118.1 L 129.1 118.1 L 126.3 118.1 L 123.5 118.1 L 120.7 118.1 L 117.9 118.1 L 115.1 118.1 L 112.2 118.2 L 109.4 118.3 L 106.6 118.4 L 103.8 118.1 L 101.1 117.3 L 98.5 116.2 L 95.8 115.4 L 93.0 115.4 L 90.3 116.1 L 87.7 117.1 L 85.0 117.9 L 82.2 118.4 L 79.4 118.8 L 76.6 119.0 L 73.8 119.1 L 71.0 119.1 L 68.2 118.9 L 65.4 118.6 L 62.7 118.1 L 60.0 117.3 L 57.3 116.4 L 54.8 115.2 L 52.5 113.7 L 50.2 112.0 L 48.1 110.0 L 46.2 108.0 L 44.4 105.8 L 43.0 103.4 L 41.9 100.8 L 41.0 98.2 L 40.3 95.5 L 39.6 92.8 L 39.0 90.0 L 38.5 87.3 L 38.0 84.5 L 37.5 81.8 L 36.9 79.0 L 36.4 76.3 L 36.0 73.5 L 35.9 70.7 L 35.8 67.9 L 35.5 65.1 L 34.6 62.5 L 33.3 60.0 L 31.7 57.7 L 30.1 55.4 L 28.7 52.9 L 27.4 50.5 L 26.2 47.9 L 25.0 45.4 L 23.7 42.9 L 22.3 40.5 L 20.9 38.0 L 20.0 35.4 L 19.9 32.6 L 20.5 29.9 L 21.7 27.3 L 23.3 25.0 L 25.7 23.7 L 28.5 23.3 L 31.3 23.1 L 34.1 22.8 L 36.9 22.1 L 39.6 21.3 L 42.3 20.8 L 45.1 21.3 L 47.6 22.6 L 49.8 24.2 L 51.9 26.1 L 53.8 28.2 L 55.5 30.4 L 57.0 32.8 L 58.5 35.2 L 60.0 37.5 L 61.3 40.0 L 62.7 42.4 L 64.2 44.8 L 65.9 47.0 L 67.9 49.0 L 69.9 51.0 L 72.0 52.9 L 74.0 54.8 L 76.2 56.6 L 78.3 58.4 L 80.4 60.2 L 82.4 62.2 L 84.4 64.2 L 86.4 66.2 L 88.4 68.2 L 90.4 70.1 L 92.5 72.0 L 94.6 73.9 L 96.7 75.7 L 98.8 77.6 L 100.9 79.4 L 103.0 81.3 L 105.1 82.9 L 107.6 84.5 L 110.0 85.9 L 112.5 87.2 L 115.1 88.4 L 117.7 89.4 L 120.4 90.2 L 123.1 91.0 L 125.8 91.6 L 128.6 92.2 L 131.3 92.8 L 134.1 93.2 L 136.9 93.4 L 139.7 93.5 L 142.5 93.4 L 145.3 93.4 L 148.1 93.4 L 150.9 93.4 L 153.8 93.4 L 156.6 93.4 L 159.4 93.4 L 162.2 93.4 L 165.0 93.4 L 167.8 93.4 L 170.6 93.4 L 173.4 93.4 L 176.3 93.4 L 179.1 93.4 L 181.9 93.4 L 184.7 93.4 L 187.5 93.4 L 190.3 93.4 L 193.1 93.4 L 195.9 93.4 L 198.7 93.4 L 201.6 93.3 L 204.4 93.2 L 207.2 93.3 L 210.0 93.5 L 212.8 93.6 L 215.6 94.0 L 218.0 95.3 L 219.3 97.8 L 219.7 100.6 L 219.6 103.4 L 218.8 106.1 L 217.1 108.2 L 214.8 109.9 L 212.4 111.3 L 209.9 112.7 L 207.4 113.9 L 204.7 114.9 L 202.0 115.7 L 199.3 116.4 L 196.5 116.8 L 193.7 117.0 L 190.9 117.1 L 188.1 117.2 L 185.3 117.3 L 182.5 117.2 L 179.7 117.2 L 176.9 117.2 L 174.1 117.2 L 171.2 117.2 L 168.4 117.2 L 165.6 117.2 L 162.8 117.1 L 160.0 117.2 L 157.2 117.3 L 154.4 117.5 L 151.6 117.8 L 148.8 118.0 L 146.0 118.2 L 143.2 118.2 L 140.3 118.2 L 137.5 118.2 L 134.7 118.1 Z";
 
-// Start line coordinates on SVG: x = -25, z = 10
+// Start line coordinates on SVG: x = 13.08, z = 41.27
 const START_LINE_SVG = {
-  x: 72.8,
-  y: 155.1,
+  x: 134.7,
+  y: 118.1,
 };
 
 type MinimapProps = {
@@ -95,7 +95,7 @@ export default function Minimap({ pose, visible, onToggle, onReset }: MinimapPro
         position: "fixed",
         bottom: 20,
         right: 20,
-        width: 220,
+        width: 250,
         borderRadius: 16,
         backgroundColor: "rgba(22, 20, 26, 0.88)",
         border: "1.5px solid rgba(255, 255, 255, 0.18)",
@@ -165,7 +165,7 @@ export default function Minimap({ pose, visible, onToggle, onReset }: MinimapPro
           style={{
             width: "100%",
             height: "auto",
-            maxHeight: 220,
+            maxHeight: 160,
             overflow: "visible",
           }}
         >
@@ -218,19 +218,20 @@ export default function Minimap({ pose, visible, onToggle, onReset }: MinimapPro
             strokeLinejoin="round"
           />
 
-          {/* Corner labels */}
-          <text x="108" y="14" fill="rgba(255,255,255,0.5)" fontSize="8" fontWeight="600" textAnchor="middle">Curva Grande</text>
-          <text x="180" y="120" fill="rgba(255,255,255,0.5)" fontSize="8" fontWeight="600" textAnchor="start">Lesmo</text>
-          <text x="156" y="240" fill="rgba(255,255,255,0.5)" fontSize="8" fontWeight="600" textAnchor="middle">Ascari</text>
-          <text x="16" y="196" fill="rgba(255,255,255,0.5)" fontSize="8" fontWeight="600" textAnchor="end">Parabolica</text>
-          <text x="50" y="60" fill="rgba(255,255,255,0.5)" fontSize="8" fontWeight="600" textAnchor="end">Rettifilo</text>
+          {/* Corner labels matching 500gt3.com */}
+          <text x="32" y="14" fill="rgba(255,255,255,0.5)" fontSize="7.5" fontWeight="600" textAnchor="middle">Lesmo (6-7)</text>
+          <text x="14" y="55" fill="rgba(255,255,255,0.5)" fontSize="7.5" fontWeight="600" textAnchor="end">Roggia (4-5)</text>
+          <text x="35" y="126" fill="rgba(255,255,255,0.5)" fontSize="7.5" fontWeight="600" textAnchor="middle">Curva Grande (3)</text>
+          <text x="96" y="133" fill="rgba(255,255,255,0.5)" fontSize="7.5" fontWeight="600" textAnchor="middle">Rettifilo (1-2)</text>
+          <text x="110" y="74" fill="rgba(255,255,255,0.5)" fontSize="7.5" fontWeight="600" textAnchor="middle">Ascari (8-10)</text>
+          <text x="228" y="86" fill="rgba(255,255,255,0.5)" fontSize="7.5" fontWeight="600" textAnchor="middle">Parabolica (11)</text>
 
           {/* Start / Finish line bar */}
           <line
-            x1={START_LINE_SVG.x - 7}
-            y1={START_LINE_SVG.y}
-            x2={START_LINE_SVG.x + 7}
-            y2={START_LINE_SVG.y}
+            x1={START_LINE_SVG.x}
+            y1={START_LINE_SVG.y - 6}
+            x2={START_LINE_SVG.x}
+            y2={START_LINE_SVG.y + 6}
             stroke="#ffffff"
             strokeWidth="3"
             strokeDasharray="2.5 2.5"

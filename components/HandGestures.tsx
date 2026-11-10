@@ -398,8 +398,6 @@ export default function HandGestures({
           </div>
         )}
       </div>
-      <div ref={labelRef} style={{ padding: "6px 10px 0", fontSize: 14, fontWeight: 700 }}>Show your hand to drive</div>
-      <div style={{ padding: "2px 10px 8px", fontSize: 11, opacity: 0.7 }}>✋ go · ✊ brake · ✌️ reverse · tilt to steer</div>
     </div>
   );
 }

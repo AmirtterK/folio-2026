@@ -3,25 +3,19 @@
 import { useEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
 import type { CarPose } from "@/components/ToyCarSmoke";
+import {
+  TRACK_SCALE,
+  TRACK_CENTER_X,
+  TRACK_CENTER_Z,
+} from "@/components/RacingTrack";
 
-// World coordinate bounds for the Monza track centerline (500gt3.com layout)
-const MIN_X = -95;
-const MAX_X = 110;
-const MIN_Z = -75;
-const MAX_Z = 52;
+// Exact SVG Path extracted directly from the Monza circuit vector layout
+const TRACK_PATH = "M 325.0 258.0 L 313.8 258.0 L 302.7 258.0 L 291.5 258.0 L 280.3 258.0 L 269.1 258.0 L 258.0 258.0 L 246.8 258.0 L 235.6 258.0 L 224.5 258.0 L 213.4 257.0 L 202.2 257.0 L 193.1 251.9 L 182.6 251.1 L 172.0 254.6 L 161.2 257.5 L 150.1 258.0 L 138.9 258.0 L 127.7 257.9 L 116.6 256.9 L 105.8 254.2 L 95.3 250.3 L 85.4 245.1 L 76.9 237.9 L 69.4 229.7 L 63.4 220.3 L 58.7 210.2 L 55.5 199.5 L 53.3 188.5 L 51.3 177.6 L 49.3 166.6 L 47.3 155.6 L 45.5 144.6 L 43.5 133.6 L 41.9 122.5 L 40.3 111.5 L 34.6 102.4 L 27.7 94.3 L 23.9 83.8 L 19.6 73.5 L 15.3 63.2 L 10.8 52.9 L 6.9 42.5 L 4.1 31.7 L 4.0 26.1 L 5.2 37.1 L 5.4 38.0 L 4.0 26.9 L 9.3 17.6 L 19.5 13.2 L 30.3 10.7 L 41.3 8.4 L 52.3 6.5 L 63.3 4.7 L 74.4 4.1 L 82.8 11.0 L 89.1 20.2 L 95.2 29.5 L 101.4 38.8 L 107.7 48.1 L 113.9 57.3 L 120.7 66.2 L 127.7 74.9 L 135.2 83.2 L 142.8 91.3 L 150.7 99.2 L 158.9 106.9 L 166.8 114.8 L 174.7 122.6 L 182.8 130.3 L 191.0 138.0 L 199.0 145.7 L 207.2 153.3 L 215.2 161.1 L 223.3 168.7 L 231.6 176.2 L 241.8 180.0 L 253.0 179.3 L 263.7 182.0 L 272.3 189.1 L 282.8 192.4 L 293.9 193.0 L 305.1 193.0 L 316.2 193.0 L 327.3 194.0 L 338.5 194.0 L 349.7 194.0 L 360.8 194.0 L 372.0 194.0 L 383.1 195.0 L 394.3 195.0 L 405.4 195.0 L 416.6 195.0 L 427.8 195.0 L 439.0 195.0 L 450.1 196.0 L 461.2 196.0 L 472.4 196.0 L 483.6 196.0 L 494.6 197.4 L 504.7 201.8 L 511.1 210.7 L 511.4 221.7 L 507.2 232.1 L 500.6 241.0 L 491.0 246.7 L 480.5 250.5 L 469.7 253.1 L 458.7 255.0 L 447.6 256.5 L 436.6 257.9 L 425.5 259.0 L 414.3 259.0 L 403.1 259.0 L 392.0 258.0 L 380.9 258.0 L 369.7 258.0 L 358.5 258.0 L 347.3 258.0 L 336.2 258.0 Z";
 
-const SVG_W = 260;
-const SVG_H = 170;
-const PAD = 16;
-
-// SVG Path generated from the exact 240 spline points of Autodromo Nazionale Monza
-const TRACK_PATH =
-  "M 149.5 146.4 L 147.0 146.4 L 144.5 146.4 L 142.0 146.4 L 139.5 146.4 L 137.0 146.4 L 134.5 146.4 L 132.0 146.4 L 129.5 146.4 L 127.0 146.4 L 124.5 146.4 L 121.9 146.4 L 119.5 146.4 L 116.9 146.4 L 114.5 146.4 L 111.9 146.5 L 109.4 146.6 L 106.9 146.6 L 104.4 146.6 L 101.8 146.4 L 99.5 146.2 L 97.0 145.9 L 94.6 145.3 L 92.5 144.0 L 91.3 141.8 L 90.6 139.5 L 89.9 137.1 L 88.8 134.9 L 86.6 134.0 L 84.1 134.3 L 81.9 135.3 L 80.5 137.3 L 79.8 139.7 L 79.3 142.2 L 78.6 144.5 L 77.1 146.4 L 74.8 147.2 L 72.2 147.2 L 69.7 146.9 L 67.3 146.6 L 64.8 146.2 L 62.3 145.9 L 59.9 145.5 L 57.4 145.0 L 55.0 144.2 L 52.8 143.2 L 50.7 141.9 L 48.7 140.3 L 46.9 138.6 L 45.2 136.9 L 43.6 135.0 L 42.1 133.0 L 40.7 131.0 L 39.5 128.9 L 38.4 126.7 L 37.4 124.4 L 36.5 122.1 L 35.7 119.8 L 35.0 117.5 L 34.4 115.1 L 33.9 112.7 L 33.6 110.3 L 33.3 107.8 L 33.1 105.4 L 32.9 103.0 L 32.7 100.5 L 32.6 98.1 L 32.5 95.7 L 32.5 93.2 L 32.5 90.8 L 32.6 88.3 L 32.6 85.9 L 32.7 83.4 L 32.7 81.0 L 32.8 78.5 L 32.8 76.1 L 32.9 73.6 L 32.9 71.2 L 32.8 68.7 L 32.6 66.3 L 32.3 63.9 L 31.8 61.5 L 30.9 59.2 L 29.5 57.3 L 27.4 55.8 L 25.3 54.5 L 23.3 53.0 L 22.8 50.8 L 23.9 48.6 L 25.6 46.8 L 27.4 45.1 L 29.6 43.9 L 31.9 43.0 L 34.1 41.8 L 35.5 39.8 L 36.0 37.4 L 36.3 35.0 L 36.9 32.6 L 38.3 30.6 L 39.9 28.7 L 41.8 27.1 L 43.8 25.8 L 46.2 24.8 L 48.6 24.3 L 51.1 24.0 L 53.6 23.7 L 56.0 23.5 L 58.6 23.3 L 61.1 23.1 L 63.6 23.1 L 66.1 23.2 L 68.5 23.7 L 70.9 24.4 L 73.2 25.3 L 75.5 26.4 L 77.6 27.7 L 79.6 29.2 L 81.2 31.0 L 82.6 33.0 L 83.8 35.1 L 85.1 37.3 L 86.4 39.3 L 87.8 41.4 L 89.2 43.4 L 90.6 45.5 L 91.9 47.5 L 93.3 49.5 L 94.7 51.5 L 96.2 53.5 L 97.6 55.5 L 99.1 57.5 L 100.5 59.5 L 102.0 61.5 L 103.5 63.5 L 104.9 65.5 L 106.4 67.5 L 107.8 69.4 L 109.3 71.4 L 110.7 73.4 L 112.2 75.4 L 113.6 77.4 L 115.1 79.4 L 116.5 81.4 L 118.0 83.3 L 119.4 85.4 L 120.9 87.4 L 122.3 89.4 L 123.7 91.4 L 125.2 93.4 L 126.7 95.4 L 128.3 97.4 L 129.6 99.2 L 131.0 101.3 L 132.5 103.3 L 134.2 105.2 L 136.3 106.2 L 138.0 104.5 L 139.3 102.3 L 140.7 100.2 L 143.0 99.6 L 145.4 100.4 L 147.5 101.6 L 149.6 103.0 L 151.3 104.8 L 152.7 106.9 L 154.1 108.9 L 156.0 110.4 L 158.3 111.3 L 160.8 111.6 L 163.3 111.6 L 165.8 111.6 L 168.2 111.6 L 170.8 111.7 L 173.3 111.7 L 175.8 111.7 L 178.3 111.7 L 180.8 111.6 L 183.3 111.6 L 185.8 111.6 L 188.3 111.6 L 190.8 111.6 L 193.3 111.6 L 195.8 111.6 L 198.4 111.6 L 200.8 111.6 L 203.3 111.5 L 205.8 111.4 L 208.3 111.4 L 210.8 111.4 L 213.3 111.7 L 215.8 112.1 L 218.2 112.5 L 220.7 113.1 L 223.0 114.0 L 225.3 115.0 L 227.4 116.2 L 229.5 117.7 L 231.4 119.3 L 233.0 121.1 L 234.4 123.1 L 235.4 125.4 L 236.1 127.8 L 236.4 130.2 L 236.2 132.6 L 235.4 134.9 L 234.2 137.1 L 232.6 139.0 L 230.9 140.8 L 228.9 142.2 L 226.6 143.2 L 224.3 144.1 L 221.9 144.8 L 219.5 145.3 L 217.0 145.8 L 214.5 146.0 L 212.0 146.2 L 209.5 146.3 L 207.0 146.3 L 204.5 146.4 L 202.0 146.5 L 199.5 146.5 L 197.0 146.5 L 194.5 146.4 L 192.0 146.4 L 189.5 146.4 L 187.0 146.4 L 184.5 146.4 L 182.0 146.4 L 179.5 146.4 L 177.0 146.4 L 174.5 146.4 L 172.0 146.4 L 169.4 146.4 L 167.0 146.4 L 164.5 146.4 L 162.0 146.4 L 159.5 146.4 L 157.0 146.4 L 154.5 146.4 L 152.0 146.4 L 149.5 146.4 Z";
-
-// Start line coordinates on SVG: x = 25.0, z = 45.0
+// Start line coordinates on SVG: x = 325.0, y = 258.0
 const START_LINE_SVG = {
-  x: 149.5,
-  y: 146.4,
+  x: 325.0,
+  y: 258.0,
 };
 
 type MinimapProps = {
@@ -41,11 +35,9 @@ export default function Minimap({ pose, visible, onToggle, onReset }: MinimapPro
     const tick = () => {
       if (markerRef.current) {
         const p = pose.current;
-        const normX = (p.x - MIN_X) / (MAX_X - MIN_X);
-        const normZ = (p.z - MIN_Z) / (MAX_Z - MIN_Z);
-
-        const sx = PAD + Math.max(0, Math.min(1, normX)) * (SVG_W - 2 * PAD);
-        const sz = PAD + Math.max(0, Math.min(1, normZ)) * (SVG_H - 2 * PAD);
+        // Direct mathematical inverse of the 3D world coordinates
+        const sx = p.x / TRACK_SCALE + TRACK_CENTER_X;
+        const sz = p.z / TRACK_SCALE + TRACK_CENTER_Z;
 
         // Heading angle in SVG degrees (0° = up along -z, 90° = right along +x)
         const rotDeg = 180 - (p.yaw * 180) / Math.PI;
@@ -95,7 +87,7 @@ export default function Minimap({ pose, visible, onToggle, onReset }: MinimapPro
         position: "fixed",
         bottom: 20,
         right: 20,
-        width: 250,
+        width: 270,
         borderRadius: 16,
         backgroundColor: "rgba(22, 20, 26, 0.88)",
         border: "1.5px solid rgba(255, 255, 255, 0.18)",
@@ -159,20 +151,20 @@ export default function Minimap({ pose, visible, onToggle, onReset }: MinimapPro
       </div>
 
       {/* Circuit Radar SVG */}
-      <div style={{ padding: "4px 10px 8px 10px", display: "flex", justifyContent: "center" }}>
+      <div style={{ padding: "4px 8px 8px 8px", display: "flex", justifyContent: "center" }}>
         <svg
-          viewBox={`0 0 ${SVG_W} ${SVG_H}`}
+          viewBox="-16 -16 548 296"
           style={{
             width: "100%",
             height: "auto",
-            maxHeight: 160,
+            maxHeight: 155,
             overflow: "visible",
           }}
         >
           <defs>
             {/* Glow filter for the player cursor */}
             <filter id="carGlow" x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor="#ff7a1a" floodOpacity="0.9" />
+              <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="#ff7a1a" floodOpacity="0.9" />
             </filter>
           </defs>
 
@@ -181,7 +173,7 @@ export default function Minimap({ pose, visible, onToggle, onReset }: MinimapPro
             d={TRACK_PATH}
             fill="none"
             stroke="#d82424"
-            strokeWidth="15"
+            strokeWidth="28"
             strokeLinejoin="round"
             strokeLinecap="round"
             opacity="0.85"
@@ -192,7 +184,7 @@ export default function Minimap({ pose, visible, onToggle, onReset }: MinimapPro
             d={TRACK_PATH}
             fill="none"
             stroke="#ffffff"
-            strokeWidth="11"
+            strokeWidth="22"
             strokeLinejoin="round"
             strokeLinecap="round"
             opacity="0.9"
@@ -203,7 +195,7 @@ export default function Minimap({ pose, visible, onToggle, onReset }: MinimapPro
             d={TRACK_PATH}
             fill="none"
             stroke="#1b181e"
-            strokeWidth="8"
+            strokeWidth="16"
             strokeLinejoin="round"
             strokeLinecap="round"
           />
@@ -213,63 +205,63 @@ export default function Minimap({ pose, visible, onToggle, onReset }: MinimapPro
             d={TRACK_PATH}
             fill="none"
             stroke="rgba(255,255,255,0.45)"
-            strokeWidth="1.2"
-            strokeDasharray="4 5"
+            strokeWidth="2.2"
+            strokeDasharray="8 9"
             strokeLinejoin="round"
           />
 
           {/* Start / Finish line bar */}
           <line
             x1={START_LINE_SVG.x}
-            y1={START_LINE_SVG.y - 6}
+            y1={START_LINE_SVG.y - 10}
             x2={START_LINE_SVG.x}
-            y2={START_LINE_SVG.y + 6}
+            y2={START_LINE_SVG.y + 10}
             stroke="#ffffff"
-            strokeWidth="3"
-            strokeDasharray="2.5 2.5"
+            strokeWidth="4"
+            strokeDasharray="4 4"
           />
 
           {/* Real-time Player Car Marker */}
           <g ref={markerRef} filter="url(#carGlow)">
             {/* Pulsing radar target ring */}
             <circle
-              r="9.5"
+              r="17"
               fill="rgba(255, 122, 26, 0.22)"
               stroke="#ff7a1a"
-              strokeWidth="0.8"
-              strokeDasharray="2.5 2"
+              strokeWidth="1.5"
+              strokeDasharray="4 3"
             />
 
             {/* Wheels */}
             {/* Front Left */}
-            <rect x="-5.2" y="-6.5" width="2" height="4" rx="0.8" fill="#141216" stroke="#ffffff" strokeWidth="0.4" />
+            <rect x="-9.5" y="-12" width="3.5" height="7" rx="1.5" fill="#141216" stroke="#ffffff" strokeWidth="0.8" />
             {/* Front Right */}
-            <rect x="3.2" y="-6.5" width="2" height="4" rx="0.8" fill="#141216" stroke="#ffffff" strokeWidth="0.4" />
+            <rect x="6.0" y="-12" width="3.5" height="7" rx="1.5" fill="#141216" stroke="#ffffff" strokeWidth="0.8" />
             {/* Rear Left */}
-            <rect x="-5.5" y="2.5" width="2.2" height="4.5" rx="0.8" fill="#141216" stroke="#ffffff" strokeWidth="0.4" />
+            <rect x="-10.0" y="4" width="4" height="8" rx="1.5" fill="#141216" stroke="#ffffff" strokeWidth="0.8" />
             {/* Rear Right */}
-            <rect x="3.3" y="2.5" width="2.2" height="4.5" rx="0.8" fill="#141216" stroke="#ffffff" strokeWidth="0.4" />
+            <rect x="6.0" y="4" width="4" height="8" rx="1.5" fill="#141216" stroke="#ffffff" strokeWidth="0.8" />
 
             {/* Car Chassis Body */}
             <path
-              d="M 0 -8.5 L 2.8 -4 L 3.4 3.5 L 3.8 7 L -3.8 7 L -3.4 3.5 L -2.8 -4 Z"
+              d="M 0 -15 L 5 -7 L 6 6 L 6.5 12 L -6.5 12 L -6 6 L -5 -7 Z"
               fill="#ff7a1a"
               stroke="#ffffff"
-              strokeWidth="0.8"
+              strokeWidth="1.4"
               strokeLinejoin="round"
             />
 
             {/* Rear Spoiler / Wing */}
-            <rect x="-5.2" y="6.6" width="10.4" height="1.6" rx="0.5" fill="#ffffff" stroke="#ff7a1a" strokeWidth="0.5" />
+            <rect x="-9.5" y="11.5" width="19" height="3" rx="1" fill="#ffffff" stroke="#ff7a1a" strokeWidth="1" />
 
             {/* Twin Headlights */}
-            <circle cx="-1.6" cy="-7.5" r="0.6" fill="#ffff99" />
-            <circle cx="1.6" cy="-7.5" r="0.6" fill="#ffff99" />
+            <circle cx="-3" cy="-13" r="1.2" fill="#ffff99" />
+            <circle cx="3" cy="-13" r="1.2" fill="#ffff99" />
 
             {/* Cockpit Canopy */}
-            <ellipse cx="0" cy="0" rx="1.6" ry="2.2" fill="#1a1820" stroke="#60a5fa" strokeWidth="0.5" />
+            <ellipse cx="0" cy="0" rx="3" ry="4" fill="#1a1820" stroke="#60a5fa" strokeWidth="0.8" />
             {/* Helmet Dot */}
-            <circle cx="0" cy="-0.2" r="0.9" fill="#ffffff" />
+            <circle cx="0" cy="-0.5" r="1.6" fill="#ffffff" />
           </g>
         </svg>
       </div>

@@ -35,7 +35,11 @@ const TOL_R = 0.007;            // radial slack: the tread sits a little outside
 const TOL_Z = 0.004;            // axial slack
 const WHEELBASE_TARGET = 2.4;   // ToyCarSmoke's WHEEL_Z * 2
 const SCALE = WHEELBASE_TARGET / (AX_REAR - AX_FRONT);
-const CREASE_DEG = 38;          // normals are smoothed across edges flatter than this
+// The scan is extremely dense and its tiny triangles deviate slightly from one another.
+// A 38° crease treats those harmless deviations as panel breaks, which reads as brush marks
+// in a glossy finish. 62° averages the scan noise while still preserving real panel, lamp,
+// and wheel-well changes in direction.
+const CREASE_DEG = 62;
 const WELL_R = 0.186;           // body faces within this radius of an axle are wheel-well liner
 const TIRE_RIM_SPLIT = 0.10;    // wheel faces beyond this radius are rubber, inside is rim/hub
 

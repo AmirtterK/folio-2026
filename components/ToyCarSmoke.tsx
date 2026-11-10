@@ -201,7 +201,11 @@ function useMaterials(color: string) {
       new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, metalness: 0.05, ...o });
     return {
       paint: new THREE.MeshPhysicalMaterial({
-        color, roughness: 0.28, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.08,
+        // Automotive paint is a dielectric colour coat under clear lacquer, not bare metal.
+        // The low base roughness and separate clearcoat give broad, continuous highlights
+        // that reveal the car form without amplifying the scan's fine triangle noise.
+        color, metalness: 0.06, roughness: 0.2,
+        clearcoat: 1, clearcoatRoughness: 0.12, reflectivity: 0.65,
       }),
       glass: new THREE.MeshPhysicalMaterial({
         color: "#22303d", roughness: 0.05, metalness: 0.6, clearcoat: 1,

@@ -149,7 +149,7 @@ const HINT: React.CSSProperties = {
 
 export default function CarLab() {
   const [view, setView] = useState<View>("track");
-  const [color, setColor] = useState("#5a3527");
+  const [color, setColor] = useState("#8d9196");
   const [smokeOn, setSmokeOn] = useState(true);
   const [showCurbs, setShowCurbs] = useState(true);
   const [night, setNight] = useState(true);

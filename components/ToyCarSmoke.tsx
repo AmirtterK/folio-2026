@@ -594,7 +594,7 @@ function R17Body({
 /* ---------- car ---------- */
 
 export default function ToyCarSmoke({
-  color = "#5a3527",
+  color = "#8d9196",
   keyboard = true,
   input,
   maxSpeed = 14,

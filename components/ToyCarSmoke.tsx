@@ -201,11 +201,7 @@ function useMaterials(color: string) {
       new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, metalness: 0.05, ...o });
     return {
       paint: new THREE.MeshPhysicalMaterial({
-        // Automotive paint is a dielectric colour coat under clear lacquer, not bare metal.
-        // The low base roughness and separate clearcoat give broad, continuous highlights
-        // that reveal the car form without amplifying the scan's fine triangle noise.
-        color, metalness: 0.06, roughness: 0.2,
-        clearcoat: 1, clearcoatRoughness: 0.12, reflectivity: 0.65,
+        color, roughness: 0.28, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.08,
       }),
       glass: new THREE.MeshPhysicalMaterial({
         color: "#22303d", roughness: 0.05, metalness: 0.6, clearcoat: 1,
@@ -544,6 +540,7 @@ function HeadlightSide({ x, level, y = 0.86, z = 2.0 }: { x: number; level: Muta
 
 /* ---------- Renault R17 body ---------- */
 
+/** Loads the R17 GLB, repaints it with the shared materials and hands the wheel / steering nodes to the physics. */
 function R17Body({
   mats,
   spinGroups,
@@ -596,7 +593,7 @@ function R17Body({
 /* ---------- car ---------- */
 
 export default function ToyCarSmoke({
-  color = "#5a3527",
+  color = "#8d9196",
   keyboard = true,
   input,
   maxSpeed = 14,

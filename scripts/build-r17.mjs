@@ -35,11 +35,7 @@ const TOL_R = 0.007;            // radial slack: the tread sits a little outside
 const TOL_Z = 0.004;            // axial slack
 const WHEELBASE_TARGET = 2.4;   // ToyCarSmoke's WHEEL_Z * 2
 const SCALE = WHEELBASE_TARGET / (AX_REAR - AX_FRONT);
-// The scan is extremely dense and its tiny triangles deviate slightly from one another.
-// A 38° crease treats those harmless deviations as panel breaks, which reads as brush marks
-// in a glossy finish. 62° averages the scan noise while still preserving real panel, lamp,
-// and wheel-well changes in direction.
-const CREASE_DEG = 62;
+const CREASE_DEG = 38;          // normals are smoothed across edges flatter than this
 const WELL_R = 0.186;           // body faces within this radius of an axle are wheel-well liner
 const TIRE_RIM_SPLIT = 0.10;    // wheel faces beyond this radius are rubber, inside is rim/hub
 
@@ -182,8 +178,9 @@ for (let f = 0; f < nF; f++) {
   if (cx < -0.88 && cy > -0.18 && cy < -0.115 && az < 0.40 && ny > -0.55) m = M.chrome;
   matOfFace[f] = m;
 }
-// Retain the integrated glass surface from the scan; its curved outer boundary follows the real body.
-// The body colour itself is smoothed only through normals, never by painting over this glazing.
+// Paint / glass / trim borders are NOT taken from per-triangle labels (that follows the scan's mesh and looks
+// hand-painted). Instead every vertex gets a smooth class score, the scores are relaxed across the surface so the
+// borders become clean curves, and triangles that straddle a border are CUT along it (see emitBodyFace below).
 function classifyPoint(cx, cy, cz, nx, ny) {
   const az = Math.abs(cz);
   if (az > 0.2 && az < 0.388 && (Math.hypot(cx - AX_FRONT, cy - AX_Y) < WELL_R || Math.hypot(cx - AX_REAR, cy - AX_Y) < WELL_R)) return M.trim;

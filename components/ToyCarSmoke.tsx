@@ -6,6 +6,7 @@
  * Same car, same controls and props as ToyCar, plus:
  *   smoke       turn the exhaust smoke on or off (default true)
  *   smokeColor  smoke tint (default a warm grey)
+ *   headlights  front lights on or off: real spot beams, glowing lenses and a faint light cone
  *
  * Smoke comes out of both tailpipes while the car is driving. Harder throttle
  * and higher speed give thicker, longer streams. The puffs are blown backward
@@ -14,6 +15,10 @@
  *
  * Give it a `terrain` function (height at x, z) and it drives for real: it moves, turns, rides
  * over hills, pitches and rolls with the ground, and leaves its smoke behind in the world.
+ * On top of that the car has real vertical physics: it leaves the ground when the surface drops away
+ * (kickers, crests), flies a ballistic arc, noses along its flight path and lands with a bump that
+ * costs some speed. `grip` (surface grip 0..1) makes gravel and grass slower, `collide` pushes it out
+ * of trees and boulders.
  * `pose` (optional ref) receives its world position and heading every frame.
  *
  * Keep ToyCar.tsx untouched as the safe version; edit this one freely.
@@ -49,6 +54,10 @@ export type ToyCarSmokeProps = {
   smokeColor?: string;
   /** Ground height at (x, z). When given, the car really drives over that ground. */
   terrain?: (x: number, z: number) => number;
+  /** Surface grip at (x, z), 1 = asphalt, lower = loose. Only used when `terrain` is given. */
+  grip?: (x: number, z: number) => number;
+  /** Obstacles: returns the push-out vector when a circle of radius r at (x, z) overlaps something. */
+  collide?: (x: number, z: number, r: number) => [number, number] | null;
   /** Receives the car's world position and heading every frame (for cameras, lights). */
   pose?: MutableRefObject<CarPose>;
   /** Where the car may drive when `terrain` is given (center of the car stays inside). */
@@ -57,6 +66,10 @@ export type ToyCarSmokeProps = {
   start?: { x: number; z: number; yaw?: number };
   /** Optional scale factor for the car (default 1.0). */
   carScale?: number;
+  /** Front lights: real beams, glowing lenses and a light cone. */
+  headlights?: boolean;
+  /** How visible the light cone is (1 at night, lower in daylight). */
+  beam?: number;
 } & Omit<ThreeElements["group"], "ref">;
 
 const KEY_MAP: Record<string, keyof CarInput> = {
@@ -70,6 +83,7 @@ const WHEEL_Z = 1.2;
 const LUGS = 28;
 const SPOKE_PAIRS = 5;
 const DEFAULT_BOUNDS = { minX: -235, maxX: 235, minZ: -235, maxZ: 235 };
+const GRAVITY = 26; // toy-world gravity (units/s²): snappy hops instead of floaty ones
 
 /* ---------- geometry helpers ---------- */
 
@@ -186,7 +200,8 @@ function useMaterials(color: string) {
       chrome: std("#d8d8dc", { metalness: 1, roughness: 0.18 }),
       disc: std("#8c8c94", { metalness: 0.85, roughness: 0.4 }),
       caliper: std("#d8262c", { roughness: 0.4 }),
-      lamp: std("#fff6c9", { emissive: "#ffe9a0", emissiveIntensity: 0.9, roughness: 0.2 }),
+      // headlight lens: dim glass when the lights are off, glowing when they are on (driven in useFrame)
+      lamp: std("#fff6c9", { emissive: "#ffe9a0", emissiveIntensity: 0.05, roughness: 0.2 }),
       tail: std("#ff2b2b", { emissive: "#ff1a1a", emissiveIntensity: 0.7, roughness: 0.3 }),
       plate: std("#f1efe8", { roughness: 0.5 }),
     };
@@ -403,6 +418,115 @@ function Wheel({ side, z, mats, tireGeo, spinRef, pivotRef }: WheelProps) {
   );
 }
 
+/* ---------- headlights ---------- */
+
+let glowTexCache: THREE.CanvasTexture | null = null;
+let poolTexCache: THREE.CanvasTexture | null = null;
+
+function glowTexture() {
+  if (!glowTexCache) {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 128;
+    const ctx = canvas.getContext("2d")!;
+    const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    g.addColorStop(0, "rgba(255,255,255,1)");
+    g.addColorStop(0.35, "rgba(255,244,205,0.65)");
+    g.addColorStop(1, "rgba(255,244,205,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 128, 128);
+    glowTexCache = new THREE.CanvasTexture(canvas);
+  }
+  return glowTexCache;
+}
+
+function groundPoolTexture() {
+  if (!poolTexCache) {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 256;
+    const ctx = canvas.getContext("2d")!;
+    const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+    g.addColorStop(0, "rgba(255, 246, 215, 0.75)");
+    g.addColorStop(0.35, "rgba(255, 238, 185, 0.42)");
+    g.addColorStop(0.7, "rgba(255, 225, 155, 0.15)");
+    g.addColorStop(1, "rgba(255, 210, 130, 0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 256, 256);
+    poolTexCache = new THREE.CanvasTexture(canvas);
+  }
+  return poolTexCache;
+}
+
+/** One headlight: spot beam illuminating track & grass, lens glow, and ground light pool. `level` (0..1) fades everything in and out. */
+function HeadlightSide({ x, level }: { x: number; level: MutableRefObject<number>; beam?: number }) {
+  const light = useRef<THREE.SpotLight>(null);
+  const target = useRef<THREE.Object3D>(null);
+  const sprite = useRef<THREE.Sprite>(null);
+  const poolMat = useRef<THREE.MeshBasicMaterial>(null);
+  const glow = useMemo(() => glowTexture(), []);
+  const poolTex = useMemo(() => groundPoolTexture(), []);
+
+  useEffect(() => {
+    if (light.current && target.current) light.current.target = target.current;
+  }, []);
+
+  useFrame(() => {
+    const l = level.current;
+    if (light.current) light.current.intensity = 280 * l;
+    if (sprite.current) {
+      sprite.current.visible = l > 0.01;
+      (sprite.current.material as THREE.SpriteMaterial).opacity = 0.85 * l;
+    }
+    if (poolMat.current) {
+      poolMat.current.opacity = 0.52 * l;
+      poolMat.current.visible = l > 0.01;
+    }
+  });
+
+  return (
+    <>
+      {/* Real spotlight shining downwards onto both track and terrain */}
+      <spotLight
+        ref={light}
+        position={[x, 0.86, 2.0]}
+        color="#fff4d0"
+        intensity={0}
+        distance={55}
+        angle={0.62}
+        penumbra={0.65}
+        decay={1.3}
+      />
+      <object3D ref={target} position={[x * 0.45, -0.2, 14]} />
+
+      {/* Ground headlight pool: always shows brightly on track asphalt and grass */}
+      <mesh position={[x * 0.5, 0.035, 7.5]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={4}>
+        <planeGeometry args={[4.4, 8.8]} />
+        <meshBasicMaterial
+          ref={poolMat}
+          map={poolTex}
+          transparent
+          opacity={0}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </mesh>
+
+      {/* Lens glow at the headlight bezel */}
+      <sprite ref={sprite} position={[x, 0.86, 2.02]} scale={[1.1, 1.1, 1]} visible={false}>
+        <spriteMaterial
+          map={glow}
+          color="#fff2c4"
+          transparent
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+          toneMapped={false}
+          opacity={0}
+        />
+      </sprite>
+    </>
+  );
+}
+
 /* ---------- car ---------- */
 
 export default function ToyCarSmoke({
@@ -415,10 +539,14 @@ export default function ToyCarSmoke({
   smoke: smokeOn = true,
   smokeColor = "#9a9792",
   terrain,
+  grip,
+  collide,
   pose,
   bounds,
   start,
   carScale = 1.0,
+  headlights = false,
+  beam = 1,
   ...groupProps
 }: ToyCarSmokeProps) {
   const carRef = useRef<THREE.Group>(null);
@@ -426,11 +554,31 @@ export default function ToyCarSmoke({
   const steerPivots = useRef<THREE.Group[]>([]);
   const keys = useRef<CarInput>({ fwd: 0, back: 0, left: 0, right: 0, brake: 0 });
   const sim = useRef({ speed: 0, steer: 0, pitch: 0, roll: 0 });
+  const lightLevel = useRef(headlights ? 1 : 0);
 
   // world driving (only used when `terrain` is given)
   const outerRef = useRef<THREE.Group>(null);
   const poseRef = useRef<THREE.Group>(null);
-  const world = useRef({ x: start?.x ?? 0, z: start?.z ?? 0, y: 0, yaw: start?.yaw ?? 0, pitch: 0, roll: 0, slope: 0 });
+  const world = useRef({
+    x: start?.x ?? 0,
+    z: start?.z ?? 0,
+    y: 0,
+    yaw: start?.yaw ?? 0,
+    pitch: 0,
+    roll: 0,
+    slope: 0,
+    // vertical physics
+    vy: 0,         // vertical speed of the car body
+    gv: 0,         // smoothed vertical speed of the ground under it (what the car "inherits" when it takes off)
+    gy: 0,         // ground height under the car last frame
+    ginit: false,
+    air: false,
+    // suspension spring that rings after a landing
+    comp: 0,
+    compV: 0,
+    // smoothed surface grip
+    grip: 1,
+  });
   const exhaust = useMemo(() => ({ p: new THREE.Vector3(), n: new THREE.Vector3(), vx: 0, vz: 0 }), []);
   const driving = !!terrain;
   useEffect(() => {
@@ -490,25 +638,77 @@ export default function ToyCarSmoke({
   useFrame((state, delta) => {
     const dt = Math.min(delta, 0.05);
     const s = sim.current;
+    const w = world.current;
     const k = input ? input.current : keys.current;
+
+    // lights fade in and out (lens glow, beams, cone) and the tail lights flare when braking
+    lightLevel.current += ((headlights ? 1 : 0) - lightLevel.current) * Math.min(1, dt * 9);
+    mats.lamp.emissiveIntensity = 0.05 + 2.6 * lightLevel.current;
+    mats.tail.emissiveIntensity = 0.6 + 0.35 * lightLevel.current + (k.brake || k.back ? 1.6 : 0);
 
     const throttle = k.fwd - k.back;
     const target = throttle * maxSpeed;
-    s.speed += (target - s.speed) * Math.min(1, dt * (throttle ? 2.2 : 1.2));
-    if (terrain) s.speed -= world.current.slope * 7 * dt; // uphill slows the car, downhill speeds it up
-    if (k.brake) s.speed *= Math.pow(0.02, dt);
+
+    // surface grip under the car (smoothed so crossing the gravel edge isn't a jolt)
+    if (terrain && grip) w.grip += (grip(w.x, w.z) - w.grip) * Math.min(1, dt * 8);
+    const gripNow = terrain && grip ? w.grip : 1;
+    const onGround = !terrain || !w.air;
+
+    if (onGround) {
+      s.speed += (target - s.speed) * Math.min(1, dt * (throttle ? 2.2 : 1.2) * (0.35 + 0.65 * gripNow));
+      if (terrain) {
+        s.speed -= w.slope * 8 * dt;                          // uphill slows the car, downhill speeds it up
+        s.speed -= s.speed * (1 - gripNow) * 0.55 * dt;       // gravel and grass drag it down
+      }
+      if (k.brake) s.speed *= Math.pow(0.02, dt * (0.5 + 0.5 * gripNow));
+    } else {
+      s.speed *= 1 - 0.04 * dt;                               // in the air: no engine, no brakes, just a little drag
+    }
     if (Math.abs(s.speed) < 0.02 && !throttle) s.speed = 0;
 
     s.steer += ((k.left - k.right) * maxSteer - s.steer) * Math.min(1, dt * 9);
 
     if (terrain) {
-      const w = world.current;
-
-      // move: bicycle steering, a bit less twitchy at speed
-      const steerEff = s.steer / (1 + Math.abs(s.speed) * 0.12);
+      // move: bicycle steering, a bit less twitchy at speed, less bite on loose ground, almost none in the air
+      const authority = w.air ? 0.15 : 0.55 + 0.45 * gripNow;
+      const steerEff = (s.steer * authority) / (1 + Math.abs(s.speed) * 0.12);
       w.yaw += ((s.speed * Math.tan(steerEff)) / (WHEEL_Z * 2)) * dt;
       w.x += Math.sin(w.yaw) * s.speed * dt;
       w.z += Math.cos(w.yaw) * s.speed * dt;
+
+      // trees, rocks, bushes, signs & barriers: solid collision with elastic crash response
+      if (collide && !(w.air && w.y - w.gy > 1.8)) {
+        const snCol = Math.sin(w.yaw), csCol = Math.cos(w.yaw);
+        // Multi-point chassis collision: front bumper, center, and rear bumper
+        const fX = w.x + snCol * 1.35 * carScale;
+        const fZ = w.z + csCol * 1.35 * carScale;
+        const rX = w.x - snCol * 1.35 * carScale;
+        const rZ = w.z - csCol * 1.35 * carScale;
+
+        const hitCenter = collide(w.x, w.z, 1.05 * carScale);
+        const hitFront = collide(fX, fZ, 0.95 * carScale);
+        const hitRear = collide(rX, rZ, 0.95 * carScale);
+
+        const hit = hitCenter || hitFront || hitRear;
+        if (hit) {
+          w.x += hit[0] * 1.15;
+          w.z += hit[1] * 1.15;
+
+          const pLen = Math.hypot(hit[0], hit[1]);
+          if (pLen > 0.001) {
+            const nx = hit[0] / pLen;
+            const nz = hit[1] / pLen;
+            const dot = (snCol * nx + csCol * nz) * s.speed;
+            if (dot < 0) {
+              // Moving into obstacle: rebound with realistic crash bounce
+              s.speed = -s.speed * 0.35;
+              w.comp = Math.min(0.28, w.comp + 0.14);
+            } else {
+              s.speed *= 0.3;
+            }
+          }
+        }
+      }
 
       // soft walls at the edge of the allowed area
       const b = bounds ?? DEFAULT_BOUNDS;
@@ -518,20 +718,64 @@ export default function ToyCarSmoke({
         s.speed *= 0.9;
       }
 
-      // sample the ground under all four wheels, then sit the car on it
+      // sample the ground under all four wheels
       const sn = Math.sin(w.yaw), cs = Math.cos(w.yaw);
       const wheelX = WHEEL_X * carScale;
       const wheelZ = WHEEL_Z * carScale;
       const ground = (lx: number, lz: number) => terrain(w.x + cs * lx + sn * lz, w.z - sn * lx + cs * lz);
       const fl = ground(wheelX, wheelZ), fr = ground(-wheelX, wheelZ);
       const rl = ground(wheelX, -wheelZ), rr = ground(-wheelX, -wheelZ);
+      const gAvg = (fl + fr + rl + rr) / 4;
       const front = (fl + fr) / 2, rear = (rl + rr) / 2;
       const slope = (front - rear) / (wheelZ * 2); // rise per unit driven forward
-      const ease = Math.min(1, dt * 14);
-      w.y += ((front + rear) / 2 - w.y) * ease;
-      w.pitch += (-Math.atan(slope) - w.pitch) * ease;
-      w.roll += (Math.atan((fl + rl - fr - rr) / 2 / (wheelX * 2)) - w.roll) * ease;
+
+      /* vertical physics: the car is a ballistic body that the ground holds up.
+         Driving up a kicker it inherits the ground's upward speed, so when the surface falls away
+         (the lip, a crest) it keeps going and flies. It lands again when the ground comes back up. */
+      if (!w.ginit) {
+        w.ginit = true;
+        w.y = gAvg;
+        w.gy = gAvg;
+      }
+      const gvRaw = (gAvg - w.gy) / Math.max(dt, 1e-3);
+      w.gv += (gvRaw - w.gv) * Math.min(1, dt * 22);
+      w.gy = gAvg;
+      w.vy = Math.max(-40, Math.min(18, w.vy - GRAVITY * dt));
+      const ny = w.y + w.vy * dt;
+      if (ny <= gAvg + (w.air ? 0 : 0.04)) {
+        if (w.air) {
+          // touchdown: the harder the hit (relative to the ground's own motion), the more speed it costs
+          const impact = Math.max(0, -(w.vy - w.gv));
+          if (impact > 2) {
+            s.speed *= 1 - Math.min(0.28, impact * 0.011);
+            w.comp = Math.min(0.3, 0.02 + impact * 0.018);
+            w.compV = 0;
+          }
+          w.air = false;
+        }
+        w.y = gAvg;
+        w.vy = w.gv;
+      } else {
+        w.air = true;
+        w.y = ny;
+      }
+
+      // attitude: follow the ground while on it, follow the flight path in the air
+      if (!w.air) {
+        const ease = Math.min(1, dt * 14);
+        w.pitch += (-Math.atan(slope) - w.pitch) * ease;
+        w.roll += (Math.atan((fl + rl - fr - rr) / 2 / (wheelX * 2)) - w.roll) * ease;
+      } else {
+        const dir = s.speed < 0 ? -1 : 1;
+        const airPitch = -Math.atan2(w.vy * dir, Math.max(3, Math.abs(s.speed))) * 0.85;
+        w.pitch += (airPitch - w.pitch) * Math.min(1, dt * 3.2);
+        w.roll += (0 - w.roll) * Math.min(1, dt * 1.5);
+      }
       w.slope = slope;
+
+      // suspension spring that rings after a landing
+      w.compV += (-w.comp * 200 - w.compV * 12) * dt;
+      w.comp += w.compV * dt;
 
       const g = poseRef.current;
       if (g) {
@@ -559,7 +803,7 @@ export default function ToyCarSmoke({
     }
 
     const spin = (s.speed * dt) / (WHEEL_R * carScale); // rolling without slipping
-    for (const w of spinGroups.current) if (w) w.rotation.x += spin;
+    for (const wh of spinGroups.current) if (wh) wh.rotation.x += spin;
     for (const p of steerPivots.current) if (p) p.rotation.y = s.steer;
 
     const accel = (throttle ? target - s.speed : 0) - (k.brake ? s.speed * 0.5 : 0);
@@ -568,9 +812,12 @@ export default function ToyCarSmoke({
 
     const car = carRef.current;
     if (car) {
-      car.rotation.x = s.pitch;
+      car.rotation.x = s.pitch + (terrain ? w.compV * 0.03 : 0);
       car.rotation.z = s.roll;
-      car.position.y = 0.02 * carScale + Math.abs(Math.sin(state.clock.elapsedTime * 20)) * Math.min(0.02, Math.abs(s.speed) * 0.0015);
+      car.position.y =
+        0.02 * carScale +
+        Math.abs(Math.sin(state.clock.elapsedTime * 20)) * Math.min(0.02, Math.abs(s.speed) * 0.0015) -
+        (terrain ? Math.max(-0.12, Math.min(0.3, w.comp)) : 0);
     }
 
     // smoke
@@ -611,13 +858,14 @@ export default function ToyCarSmoke({
             <mesh position={[s * 0.9, 1.19, 0.64]} material={mats.trim}><boxGeometry args={[0.14, 0.04, 0.05]} /></mesh>
             <mesh position={[s * 0.99, 1.23, 0.62]} material={mats.paint}><boxGeometry args={[0.1, 0.1, 0.19]} /></mesh>
 
-            {/* headlight: chrome ring, lens */}
+            {/* headlight: chrome ring, lens (glows when the lights are on) */}
             <mesh position={[s * 0.62, 0.86, 1.93]} scale={[1, 0.85, 0.55]} material={mats.lamp}>
               <sphereGeometry args={[0.15, 20, 14]} />
             </mesh>
             <mesh position={[s * 0.62, 0.86, 1.93]} material={mats.chrome}>
               <torusGeometry args={[0.15, 0.015, 8, 28]} />
             </mesh>
+            <HeadlightSide x={s * 0.62} level={lightLevel} beam={beam} />
             {/* tail light and exhaust */}
             <mesh position={[s * 0.62, 0.9, -1.96]} material={mats.tail}><boxGeometry args={[0.45, 0.12, 0.05]} /></mesh>
             <mesh position={[s * 0.5, 0.4, -1.97]} rotation={[Math.PI / 2, 0, 0]} material={mats.chrome}>

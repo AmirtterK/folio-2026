@@ -68,8 +68,8 @@ function createTrackTexture(): THREE.CanvasTexture {
   canvas.height = 512;
   const ctx = canvas.getContext("2d")!;
 
-  // Dark asphalt base in the center
-  ctx.fillStyle = "#2c282e";
+  // Dark asphalt base in the center with realistic race surface grain
+  ctx.fillStyle = "#363238";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   // Asphalt fine texture speckles
@@ -119,7 +119,7 @@ function createTrackTexture(): THREE.CanvasTexture {
 
 /* ---------- Procedural Monza Geometry Generator ---------- */
 
-export function buildMonzaGeometry() {
+export function buildMonzaGeometry(width = 8.5, period = 3.2, yOffset = 0) {
   const points = [
     new THREE.Vector3(30.15, 0.02, 57.15),
     new THREE.Vector3(25.12, 0.02, 57.15),
@@ -165,10 +165,6 @@ export function buildMonzaGeometry() {
     new THREE.Vector3(-111.24, 0.02, -35.12),
     new THREE.Vector3(-113.02, 0.02, -39.83),
     new THREE.Vector3(-114.26, 0.02, -44.68),
-    new THREE.Vector3(-114.28, 0.02, -47.21),
-    new THREE.Vector3(-113.77, 0.02, -42.24),
-    new THREE.Vector3(-113.67, 0.02, -41.87),
-    new THREE.Vector3(-114.29, 0.02, -46.83),
     new THREE.Vector3(-111.92, 0.02, -51.01),
     new THREE.Vector3(-107.34, 0.02, -53.02),
     new THREE.Vector3(-102.44, 0.02, -54.12),
@@ -245,8 +241,8 @@ export function buildMonzaGeometry() {
 
   const curve = new THREE.CatmullRomCurve3(points, true, "centripetal", 0.5);
   const SAMPLES = 480;
-  const TRACK_WIDTH = 8.5;
-  const STRIPE_PERIOD = 3.2;
+  const TRACK_WIDTH = width;
+  const STRIPE_PERIOD = period;
 
   const positions: number[] = [];
   const normals: number[] = [];
@@ -272,20 +268,21 @@ export function buildMonzaGeometry() {
     const halfW = TRACK_WIDTH / 2;
 
     // Left vertex (v = 0)
-    positions.push(p.x + norm.x * halfW, p.y, p.z + norm.z * halfW);
+    positions.push(p.x + norm.x * halfW, p.y + yOffset, p.z + norm.z * halfW);
     normals.push(0, 1, 0);
     uvs.push(u, 0.0);
 
     // Right vertex (v = 1)
-    positions.push(p.x - norm.x * halfW, p.y, p.z - norm.z * halfW);
+    positions.push(p.x - norm.x * halfW, p.y + yOffset, p.z - norm.z * halfW);
     normals.push(0, 1, 0);
     uvs.push(u, 1.0);
 
     if (i < SAMPLES) {
       const row1 = i * 2;
       const row2 = (i + 1) * 2;
-      indices.push(row1, row1 + 1, row2);
-      indices.push(row1 + 1, row2 + 1, row2);
+      // Counter-clockwise winding so front face normal points UP (+Y)
+      indices.push(row1, row2, row1 + 1);
+      indices.push(row1 + 1, row2, row2 + 1);
     }
   }
 
@@ -294,33 +291,237 @@ export function buildMonzaGeometry() {
   geom.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
   geom.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geom.setIndex(indices);
+  geom.computeVertexNormals();
   return geom;
+}
+
+/* ---------- Procedural ground: grass, dry earth patches, gravel runoff ---------- */
+
+/** Tileable value noise (wraps at the edges so the texture repeats without seams). */
+export function periodicNoise(size: number, cells: number, seed: number) {
+  let s = seed;
+  const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const grid = new Float32Array(cells * cells);
+  for (let i = 0; i < grid.length; i++) grid[i] = rnd();
+  const out = new Float32Array(size * size);
+  const step = cells / size;
+  for (let y = 0; y < size; y++) {
+    const fy = y * step;
+    const y0 = Math.floor(fy);
+    const ty = fy - y0;
+    const sy = ty * ty * (3 - 2 * ty);
+    const y1 = (y0 + 1) % cells;
+    for (let x = 0; x < size; x++) {
+      const fx = x * step;
+      const x0 = Math.floor(fx);
+      const tx = fx - x0;
+      const sx = tx * tx * (3 - 2 * tx);
+      const x1 = (x0 + 1) % cells;
+      const a = grid[y0 * cells + x0], b = grid[y0 * cells + x1];
+      const c = grid[y1 * cells + x0], d = grid[y1 * cells + x1];
+      out[y * size + x] = a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
+    }
+  }
+  return out;
+}
+
+function createGroundTexture(): THREE.CanvasTexture {
+  const size = 1024;
+  const n1 = periodicNoise(size, 4, 11);
+  const n2 = periodicNoise(size, 12, 23);
+  const n3 = periodicNoise(size, 40, 37);
+  const n4 = periodicNoise(size, 160, 51);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const img = ctx.createImageData(size, size);
+
+  const lo = [40, 70, 30];    // shaded grass
+  const hi = [112, 152, 66];  // sunlit grass
+  const dry = [138, 122, 68]; // dry earth / hay patches
+
+  for (let i = 0; i < size * size; i++) {
+    const big = n1[i] * 0.45 + n2[i] * 0.35 + n3[i] * 0.2;
+    const t = Math.min(1, Math.max(0, (big - 0.22) * 1.7));
+    const dryAmt = Math.min(0.75, Math.max(0, (n2[i] * 0.55 + n1[i] * 0.45 - 0.6) * 4.5));
+    const jitter = (n4[i] - 0.5) * 26;
+    for (let c = 0; c < 3; c++) {
+      const grass = lo[c] + (hi[c] - lo[c]) * t;
+      const v = grass + (dry[c] - grass) * dryAmt + jitter;
+      img.data[i * 4 + c] = Math.max(0, Math.min(255, v));
+    }
+    img.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+
+  // grass blades
+  for (let i = 0; i < 16000; i++) {
+    const x = Math.random() * size;
+    const y = Math.random() * size;
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2;
+    const len = 3 + Math.random() * 5;
+    ctx.strokeStyle = Math.random() > 0.5 ? "rgba(150,190,80,0.22)" : "rgba(20,44,16,0.25)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+    ctx.stroke();
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  tex.repeat.set(12, 12);
+  return tex;
+}
+
+function createGravelTexture(): THREE.CanvasTexture {
+  const size = 512;
+  const n = periodicNoise(size, 16, 77);
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const img = ctx.createImageData(size, size);
+  for (let i = 0; i < size * size; i++) {
+    const v = 118 + n[i] * 40;
+    img.data[i * 4] = v + 12;
+    img.data[i * 4 + 1] = v + 2;
+    img.data[i * 4 + 2] = v - 22;
+    img.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  for (let i = 0; i < 9000; i++) {
+    const l = 60 + Math.random() * 150;
+    ctx.fillStyle = `rgba(${l + 10},${l},${l - 25},0.55)`;
+    ctx.fillRect(Math.random() * size, Math.random() * size, 1 + Math.random() * 2, 1 + Math.random() * 2);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return tex;
+}
+
+function createGlowTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 128;
+  const ctx = canvas.getContext("2d")!;
+  const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, "rgba(255,255,255,1)");
+  g.addColorStop(0.35, "rgba(255,255,255,0.45)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(canvas);
+}
+
+/* ---------- Street lamps along the outside of the corners (night only) ---------- */
+
+function TrackLamps({ geometry }: { geometry: THREE.BufferGeometry }) {
+  const glow = useMemo(() => createGlowTexture(), []);
+  const mats = useMemo(
+    () => ({
+      pole: new THREE.MeshStandardMaterial({ color: "#2a2d3a", roughness: 0.6, metalness: 0.4 }),
+      head: new THREE.MeshBasicMaterial({ color: "#fff1c9", toneMapped: false }),
+      pool: new THREE.MeshBasicMaterial({
+        map: glow,
+        color: "#ffc66b",
+        transparent: true,
+        opacity: 0.5,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+      }),
+    }),
+    [glow]
+  );
+
+  const lamps = useMemo(() => {
+    const pos = geometry.attributes.position as THREE.BufferAttribute;
+    const rows = pos.count / 2;
+    const center = (i: number) => {
+      const k = ((i % (rows - 1)) + (rows - 1)) % (rows - 1);
+      return new THREE.Vector2(
+        (pos.getX(k * 2) + pos.getX(k * 2 + 1)) / 2,
+        (pos.getZ(k * 2) + pos.getZ(k * 2 + 1)) / 2
+      );
+    };
+    const out: { x: number; z: number; rot: number }[] = [];
+    let flip = 1;
+    for (let i = 0; i < rows - 1; i += 24) {
+      const c = center(i);
+      const t0 = center(i + 2).sub(center(i - 2)).normalize();
+      const t1 = center(i + 14).sub(center(i + 10)).normalize();
+      const turn = t1.clone().sub(t0); // points toward the inside of the corner
+      const left = new THREE.Vector2(-t0.y, t0.x);
+      const bend = left.dot(turn);
+      const side = bend > 0.03 ? -1 : bend < -0.03 ? 1 : (flip = -flip);
+      const dir = left.multiplyScalar(side); // from the track outward
+      const base = c.clone().addScaledVector(dir, 8.6);
+      // local +x of the lamp group points back toward the track
+      out.push({ x: base.x, z: base.y, rot: Math.atan2(dir.y, -dir.x) });
+    }
+    return out;
+  }, [geometry]);
+
+  return (
+    <group>
+      {lamps.map((l, i) => (
+        <group key={i} position={[l.x, 0, l.z]} rotation={[0, l.rot, 0]}>
+          <mesh position={[0, 2.7, 0]} material={mats.pole} castShadow>
+            <cylinderGeometry args={[0.1, 0.15, 5.4, 8]} />
+          </mesh>
+          <mesh position={[0.9, 5.35, 0]} material={mats.pole}>
+            <boxGeometry args={[1.9, 0.1, 0.1]} />
+          </mesh>
+          <mesh position={[1.8, 5.27, 0]} material={mats.head}>
+            <boxGeometry args={[0.9, 0.12, 0.45]} />
+          </mesh>
+          <mesh position={[1.8, 0.07, 0]} rotation={[-Math.PI / 2, 0, 0]} material={mats.pool} renderOrder={3}>
+            <planeGeometry args={[17, 17]} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
 }
 
 /* ---------- Racing Track Component (Monza Circuit) ---------- */
 
 type RacingTrackProps = {
   showCurbs?: boolean;
+  /** When true (default), the heightfield `Terrain` paints the realistic grass + gravel without self-intersecting ribbon geometry. */
+  withTerrain?: boolean;
+  night?: boolean;
 };
 
-export function RacingTrack({ showCurbs = true }: RacingTrackProps) {
+export function RacingTrack({ showCurbs = true, night = false, withTerrain = true }: RacingTrackProps) {
+  const groundMaterial = useMemo(
+    () => (withTerrain ? undefined : new THREE.MeshStandardMaterial({ map: createGroundTexture(), roughness: 0.96, metalness: 0 })),
+    [withTerrain]
+  );
+
   const trackMaterial = useMemo(() => {
     const tex = createTrackTexture();
     return new THREE.MeshStandardMaterial({
       map: tex,
-      roughness: 0.84,
-      metalness: 0.05,
-      side: THREE.DoubleSide,
+      roughness: 0.78,
+      metalness: 0.08,
+      side: THREE.FrontSide,
     });
   }, []);
 
   const plainAsphaltMaterial = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: "#2c282e",
-        roughness: 0.88,
-        metalness: 0.04,
-        side: THREE.DoubleSide,
+        color: "#343036",
+        roughness: 0.82,
+        metalness: 0.06,
+        side: THREE.FrontSide,
       }),
     []
   );
@@ -329,7 +530,7 @@ export function RacingTrack({ showCurbs = true }: RacingTrackProps) {
     const tex = createCheckeredTexture();
     return new THREE.MeshStandardMaterial({
       map: tex,
-      roughness: 0.8,
+      roughness: 0.75,
       metalness: 0.1,
       polygonOffset: true,
       polygonOffsetFactor: -1,
@@ -341,17 +542,14 @@ export function RacingTrack({ showCurbs = true }: RacingTrackProps) {
 
   return (
     <group>
-      {/* Monza landscape ground plane */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-        <planeGeometry args={[800, 800]} />
-        <meshStandardMaterial color="#6e9a4f" roughness={0.92} metalness={0.02} />
-      </mesh>
+      {/* Fallback flat ground only if Terrain heightfield is disabled */}
+      {!withTerrain && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} material={groundMaterial} receiveShadow>
+          <planeGeometry args={[800, 800]} />
+        </mesh>
+      )}
 
-      {/* Outer landscape border */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]}>
-        <planeGeometry args={[1600, 1600]} />
-        <meshStandardMaterial color="#557a3e" roughness={1} />
-      </mesh>
+      {night && <TrackLamps geometry={monzaGeometry} />}
 
       {/* Monza Asphalt Road Ribbon with Flat Red & White Pavement Curbs */}
       <mesh
@@ -390,15 +588,22 @@ export function RacingTrack({ showCurbs = true }: RacingTrackProps) {
 export function FolioTopDownCam({
   pose,
   zoomMultiplier = 1,
+  inspecting = false,
+  inspectTarget,
+  inspectCamPos,
 }: {
   pose: MutableRefObject<CarPose>;
   zoomMultiplier?: number;
+  inspecting?: boolean;
+  inspectTarget?: THREE.Vector3;
+  inspectCamPos?: THREE.Vector3;
 }) {
   const camera = useThree((s) => s.camera);
   const st = useRef({
     ready: false,
     smoothedTarget: new THREE.Vector3(),
     currentRadius: 32,
+    inspectAlpha: 0,
   });
 
   useFrame((_, delta) => {
@@ -406,13 +611,19 @@ export function FolioTopDownCam({
     const p = pose.current;
     const s = st.current;
 
-    // Center target on car
-    const target = new THREE.Vector3(p.x, p.y + 0.3, p.z);
+    // Smoothly blend inspection alpha (0 = normal driving, 1 = inspecting trophy)
+    const targetAlpha = inspecting && inspectTarget && inspectCamPos ? 1 : 0;
+    s.inspectAlpha += (targetAlpha - s.inspectAlpha) * (1 - Math.exp(-4.5 * dt));
+
+    // Car drive target
+    const carTarget = new THREE.Vector3(p.x, p.y + 0.3, p.z);
+    const goalTarget = s.inspectAlpha > 0.5 && inspectTarget ? inspectTarget : carTarget;
+
     if (!s.ready) {
-      s.smoothedTarget.copy(target);
+      s.smoothedTarget.copy(goalTarget);
       s.ready = true;
     } else {
-      s.smoothedTarget.lerp(target, 1 - Math.exp(-6.5 * dt));
+      s.smoothedTarget.lerp(goalTarget, 1 - Math.exp(-6.5 * dt));
     }
 
     // Dynamic zoom based on driving speed
@@ -423,18 +634,25 @@ export function FolioTopDownCam({
 
     // High-angle top-down view aligned straight with the track axes (theta = 0)
     const phi = Math.PI * 0.16; // ~28.8° tilt from overhead for rich 3D depth
-    const theta = 0;            // Aligns screen-X (horizontal) and screen-Z (vertical) 1:1 with Minimap
-
     const r = s.currentRadius;
     const offsetX = 0;
     const offsetY = r * Math.cos(phi);
     const offsetZ = r * Math.sin(phi);
 
-    camera.position.set(
+    const driveCamPos = new THREE.Vector3(
       s.smoothedTarget.x + offsetX,
       s.smoothedTarget.y + offsetY,
       s.smoothedTarget.z + offsetZ
     );
+
+    if (s.inspectAlpha > 0.001 && inspectCamPos) {
+      // Smoothly blend position between driving overhead and inspection angle
+      camera.position.lerpVectors(driveCamPos, inspectCamPos, s.inspectAlpha);
+    } else {
+      // 100% rigid lock to smoothed target when driving — zero lag, zero wobble, zero dizziness
+      camera.position.set(driveCamPos.x, driveCamPos.y, driveCamPos.z);
+    }
+
     camera.lookAt(s.smoothedTarget);
   });
 

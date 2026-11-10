@@ -9,7 +9,7 @@
  *   open palm (4 fingers up)        drive forward
  *   fist                            brake
  *   two fingers (index + middle)    reverse
- *   tilt your hand left / right     steer, proportional to the tilt (like turning a wheel)
+ *   move your hand left / right     steer, proportional to its position from your relaxed centre
  *   anything else, or no hand       coast
  *
  * Hand tracking is MediaPipe's Hand Landmarker (@mediapipe/tasks-vision) and runs entirely in the browser; the video
@@ -37,11 +37,11 @@ const MODEL_REMOTE =
   "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
 const MODEL_CACHE = "hand-landmarker-v1"; // browser Cache Storage, so the download happens once
 
-const STEER_DEAD = (8 * Math.PI) / 180;   // tilt below this is ignored, so a relaxed hand drives straight
-const STEER_FULL = (40 * Math.PI) / 180;  // tilt at which the wheels reach full lock
-const STEER_SMOOTH = 0.4;                 // 0..1, higher follows the hand faster
-const HOLD_FRAMES = 3;                    // a gesture must hold this many frames before it takes effect
-const HAND_LOST_MS = 350;                 // controls release this long after the hand leaves the frame
+const STEER_DEAD = 0.045;                 // 4.5% of the camera width: hand tremor does not steer
+const STEER_FULL = 0.22;                  // a comfortable 22% sideways hand movement reaches full lock
+const STEER_RESPONSE = 8;                 // per-second smoothing; stable without feeling delayed
+const HOLD_MS = 120;                      // a gesture must hold briefly before it takes effect
+const HAND_LOST_MS = 220;                 // release promptly when the hand leaves the frame
 const FRAME_MS = 33;                      // run the tracker at about 30 fps, leaving the rest to the 3D scene
 const GPU_TIMEOUT_MS = 10000;             // if the GPU delegate has not come up by then, fall back to the CPU
 const CPU_TIMEOUT_MS = 30000;             // give up with an error if the CPU start takes longer than this
@@ -62,8 +62,8 @@ const BONES: [number, number][] = [
   [0, 17],
 ];
 
-/** Reads the gesture and the hand's tilt from the 21 landmarks. Works in pixel space so it is not skewed by the video's aspect ratio. */
-function classify(l: Pt[], w: number, h: number): { gesture: Gesture; tilt: number } {
+/** Reads the drive gesture and relaxed left/right hand position from the 21 landmarks. */
+function classify(l: Pt[], w: number, h: number): { gesture: Gesture; wristX: number } {
   const px = (i: number): Pt => ({ x: l[i].x * w, y: l[i].y * h });
   const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
   const wrist = px(0);
@@ -73,16 +73,18 @@ function classify(l: Pt[], w: number, h: number): { gesture: Gesture; tilt: numb
   const index = up(8, 6), middle = up(12, 10), ring = up(16, 14), pinky = up(20, 18);
   const count = Number(index) + Number(middle) + Number(ring) + Number(pinky);
 
+  // Require a genuinely compact hand before braking. Counting zero extended fingers alone made relaxed or partly
+  // occluded hands brake unexpectedly.
+  const palm = dist(wrist, px(9));
+  const fist = [8, 12, 16, 20].every((tip) => dist(px(tip), wrist) < palm * 1.3);
+
   let gesture: Gesture = "coast";
-  if (count === 4) gesture = "forward";
-  else if (count === 0) gesture = "brake";
+  if (count >= 3) gesture = "forward";
+  else if (fist) gesture = "brake";
   else if (index && middle && !ring && !pinky) gesture = "reverse";
 
-  // angle of the wrist -> middle knuckle line from straight up. The video is not mirrored in the data, so a hand
-  // tilted toward the driver's right leans toward smaller x; the minus sign makes positive mean "right".
-  const mid = px(9);
-  const tilt = -Math.atan2(mid.x - wrist.x, wrist.y - mid.y);
-  return { gesture, tilt };
+  // Video is mirrored for the driver. Negating raw camera X makes physical right mean steering right.
+  return { gesture, wristX: -l[0].x };
 }
 
 function describeError(e: unknown) {
@@ -240,9 +242,11 @@ export default function HandGestures({
     let lastRun = 0;
     let lastSeen = 0;
     let candidate: Gesture | null = null;
-    let candidateFrames = 0;
+    let candidateSince = 0;
     let stable: Gesture = "coast";
     let steer = 0; // -1 (full left) .. +1 (full right), smoothed
+    let neutralX: number | null = null;
+    let lastSample = 0;
     let lastPressed = "";
 
     const setLabel = (text: string) => {
@@ -281,15 +285,22 @@ export default function HandGestures({
 
       if (hand) {
         lastSeen = now;
-        const { gesture, tilt } = classify(hand, v.videoWidth, v.videoHeight);
+        const { gesture, wristX } = classify(hand, v.videoWidth, v.videoHeight);
 
-        if (gesture === candidate) candidateFrames++;
-        else { candidate = gesture; candidateFrames = 1; }
-        if (candidateFrames >= HOLD_FRAMES) stable = gesture;
+        if (gesture !== candidate) { candidate = gesture; candidateSince = now; }
+        if (now - candidateSince >= HOLD_MS) stable = gesture;
 
-        const mag = Math.min(1, Math.max(0, (Math.abs(tilt) - STEER_DEAD) / (STEER_FULL - STEER_DEAD)));
-        steer += (Math.sign(tilt) * mag - steer) * STEER_SMOOTH;
+        // Capture a neutral position when the hand first appears. While coasting near centre, gently recenter it
+        // so the driver can relax and reposition without a steering jump.
+        if (neutralX === null) neutralX = wristX;
+        const offset = wristX - neutralX;
+        const mag = Math.min(1, Math.max(0, (Math.abs(offset) - STEER_DEAD) / (STEER_FULL - STEER_DEAD)));
+        const targetSteer = Math.sign(offset) * mag * mag; // soft around centre, full authority at the edge
+        const dt = lastSample ? Math.min(0.1, (now - lastSample) / 1000) : 0;
+        lastSample = now;
+        steer += (targetSteer - steer) * (1 - Math.exp(-STEER_RESPONSE * dt));
         if (Math.abs(steer) < 0.02) steer = 0;
+        if (stable === "coast" && Math.abs(steer) < 0.08) neutralX += (wristX - neutralX) * 0.08;
 
         const k = input.current;
         k.fwd = stable === "forward" ? 1 : 0;
@@ -319,9 +330,11 @@ export default function HandGestures({
         }
       } else if (now - lastSeen > HAND_LOST_MS) {
         candidate = null;
-        candidateFrames = 0;
+        candidateSince = 0;
         stable = "coast";
         steer = 0;
+        neutralX = null;
+        lastSample = 0;
         release();
         setLabel("Show your hand to drive");
       }

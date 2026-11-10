@@ -24,9 +24,10 @@
  * Keep ToyCar.tsx untouched as the safe version; edit this one freely.
  */
 
-import { useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { MutableRefObject } from "react";
 import { useFrame } from "@react-three/fiber";
+import { useGLTF } from "@react-three/drei";
 import type { ThreeElements } from "@react-three/fiber";
 import * as THREE from "three";
 import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
@@ -66,6 +67,8 @@ export type ToyCarSmokeProps = {
   start?: { x: number; z: number; yaw?: number };
   /** Optional scale factor for the car (default 1.0). */
   carScale?: number;
+  /** Car body: the original procedural toy car, or the Renault R17 GLB (public/models/r17.glb, built by scripts/build-r17.mjs). */
+  model?: "toy" | "r17";
   /** Front lights: real beams, glowing lenses and a light cone. */
   headlights?: boolean;
   /** How visible the light cone is (1 at night, lower in daylight). */
@@ -80,6 +83,14 @@ const KEY_MAP: Record<string, keyof CarInput> = {
 const WHEEL_R = 0.45;
 const WHEEL_X = 0.86;
 const WHEEL_Z = 1.2;
+
+/* Renault R17 model (scripts/build-r17.mjs): same wheelbase as the toy car, smaller wheels, narrower track. */
+const R17_URL = "/models/r17.glb";
+const R17_WHEEL_R = 0.3182;
+const R17_WHEEL_X = 0.698;
+const R17_Z_SHIFT = -0.04; // the GLB's axles sit at z = 1.24 / -1.16; shift so they are at +-1.2 like the toy car
+const R17_EXHAUST = { x: 0.45, y: 0.32, z: -2.1 };
+const R17_LAMP = { x: 0.54, y: 0.6, z: 1.92 };
 const LUGS = 28;
 const SPOKE_PAIRS = 5;
 const DEFAULT_BOUNDS = { minX: -235, maxX: 235, minZ: -235, maxZ: 235 };
@@ -457,7 +468,7 @@ function groundPoolTexture() {
 }
 
 /** One headlight: spot beam illuminating track & grass, lens glow, and ground light pool. `level` (0..1) fades everything in and out. */
-function HeadlightSide({ x, level }: { x: number; level: MutableRefObject<number>; beam?: number }) {
+function HeadlightSide({ x, level, y = 0.86, z = 2.0 }: { x: number; level: MutableRefObject<number>; beam?: number; y?: number; z?: number }) {
   const light = useRef<THREE.SpotLight>(null);
   const target = useRef<THREE.Object3D>(null);
   const sprite = useRef<THREE.Sprite>(null);
@@ -487,7 +498,7 @@ function HeadlightSide({ x, level }: { x: number; level: MutableRefObject<number
       {/* Real spotlight shining downwards onto both track and terrain */}
       <spotLight
         ref={light}
-        position={[x, 0.86, 2.0]}
+        position={[x, y, z]}
         color="#fff4d0"
         intensity={0}
         distance={55}
@@ -512,7 +523,7 @@ function HeadlightSide({ x, level }: { x: number; level: MutableRefObject<number
       </mesh>
 
       {/* Lens glow at the headlight bezel */}
-      <sprite ref={sprite} position={[x, 0.86, 2.02]} scale={[1.1, 1.1, 1]} visible={false}>
+      <sprite ref={sprite} position={[x, y, z + 0.02]} scale={[1.1, 1.1, 1]} visible={false}>
         <spriteMaterial
           map={glow}
           color="#fff2c4"
@@ -527,10 +538,62 @@ function HeadlightSide({ x, level }: { x: number; level: MutableRefObject<number
   );
 }
 
+/* ---------- Renault R17 body ---------- */
+
+/** Loads the R17 GLB, repaints it with the shared materials and hands the wheel / steering nodes to the physics. */
+function R17Body({
+  mats,
+  spinGroups,
+  steerPivots,
+  cast,
+}: {
+  mats: Mats;
+  spinGroups: MutableRefObject<THREE.Group[]>;
+  steerPivots: MutableRefObject<THREE.Group[]>;
+  cast: boolean;
+}) {
+  const gltf = useGLTF(R17_URL);
+  const root = useMemo(() => {
+    const r = gltf.scene.clone(true);
+    r.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.userData.matName = (m.material as THREE.Material).name;
+      m.castShadow = cast;
+    });
+    return r;
+  }, [gltf, cast]);
+
+  // GLB material names -> the shared materials, so the `color` prop still repaints the car
+  useLayoutEffect(() => {
+    const map: Record<string, THREE.Material> = {
+      paint: mats.paint, glass: mats.glass, trim: mats.trim, lamp: mats.lamp,
+      tail: mats.tail, chrome: mats.chrome, tire: mats.tire, rim: mats.chrome,
+    };
+    root.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh && map[m.userData.matName]) m.material = map[m.userData.matName];
+    });
+  }, [root, mats]);
+
+  useLayoutEffect(() => {
+    const get = (n: string) => root.getObjectByName(n) as THREE.Group;
+    // same order as the toy car: 0 front +x, 1 front -x, 2 rear +x, 3 rear -x
+    spinGroups.current = [get("Wheel_FL"), get("Wheel_FR"), get("Wheel_RL"), get("Wheel_RR")];
+    steerPivots.current = [get("Steer_FL"), get("Steer_FR")];
+  }, [root, spinGroups, steerPivots]);
+
+  return (
+    <group position={[0, 0, R17_Z_SHIFT]}>
+      <primitive object={root} />
+    </group>
+  );
+}
+
 /* ---------- car ---------- */
 
 export default function ToyCarSmoke({
-  color = "#ff7a1a",
+  color = "#8d9196",
   keyboard = true,
   input,
   maxSpeed = 14,
@@ -545,10 +608,17 @@ export default function ToyCarSmoke({
   bounds,
   start,
   carScale = 1.0,
+  model = "toy",
   headlights = false,
   beam = 1,
   ...groupProps
 }: ToyCarSmokeProps) {
+  const r17 = model === "r17";
+  const wheelR = r17 ? R17_WHEEL_R : WHEEL_R;
+  const trackX = r17 ? R17_WHEEL_X : WHEEL_X;
+  const exX = r17 ? R17_EXHAUST.x : EXHAUST_X;
+  const exY = r17 ? R17_EXHAUST.y : EXHAUST_Y;
+  const exZ = r17 ? R17_EXHAUST.z : EXHAUST_Z;
   const carRef = useRef<THREE.Group>(null);
   const spinGroups = useRef<THREE.Group[]>([]);
   const steerPivots = useRef<THREE.Group[]>([]);
@@ -720,7 +790,7 @@ export default function ToyCarSmoke({
 
       // sample the ground under all four wheels
       const sn = Math.sin(w.yaw), cs = Math.cos(w.yaw);
-      const wheelX = WHEEL_X * carScale;
+      const wheelX = trackX * carScale;
       const wheelZ = WHEEL_Z * carScale;
       const ground = (lx: number, lz: number) => terrain(w.x + cs * lx + sn * lz, w.z - sn * lx + cs * lz);
       const fl = ground(wheelX, wheelZ), fr = ground(-wheelX, wheelZ);
@@ -782,8 +852,8 @@ export default function ToyCarSmoke({
         g.position.set(w.x, w.y, w.z);
         g.rotation.set(w.pitch, w.yaw, w.roll, "YXZ");
         g.updateMatrixWorld();
-        exhaust.p.set(EXHAUST_X * carScale, EXHAUST_Y * carScale, EXHAUST_Z * carScale);
-        exhaust.n.set(-EXHAUST_X * carScale, EXHAUST_Y * carScale, EXHAUST_Z * carScale);
+        exhaust.p.set(exX * carScale, exY * carScale, exZ * carScale);
+        exhaust.n.set(-exX * carScale, exY * carScale, exZ * carScale);
         g.localToWorld(exhaust.p);
         g.localToWorld(exhaust.n);
         const outer = outerRef.current;
@@ -802,7 +872,7 @@ export default function ToyCarSmoke({
       }
     }
 
-    const spin = (s.speed * dt) / (WHEEL_R * carScale); // rolling without slipping
+    const spin = (s.speed * dt) / (wheelR * carScale); // rolling without slipping
     for (const wh of spinGroups.current) if (wh) wh.rotation.x += spin;
     for (const p of steerPivots.current) if (p) p.rotation.y = s.steer;
 
@@ -832,6 +902,18 @@ export default function ToyCarSmoke({
       {/* moves around the world when `terrain` is given, otherwise stays at the origin */}
       <group ref={poseRef}>
       <group ref={carRef} scale={carScale} position={[0, 0.02 * carScale, 0]}>
+        {r17 && (
+          <>
+            <Suspense fallback={null}>
+              <R17Body mats={mats} spinGroups={spinGroups} steerPivots={steerPivots} cast={driving} />
+            </Suspense>
+            {[-1, 1].map((s) => (
+              <HeadlightSide key={s} x={s * R17_LAMP.x} y={R17_LAMP.y} z={R17_LAMP.z} level={lightLevel} beam={beam} />
+            ))}
+          </>
+        )}
+        {!r17 && (
+        <>
         {/* shell */}
         <mesh geometry={geo.body} material={mats.paint} />
         <mesh geometry={geo.glass} material={mats.glass} />
@@ -895,6 +977,8 @@ export default function ToyCarSmoke({
         <Wheel side={-1} z={WHEEL_Z} mats={mats} tireGeo={geo.tire} spinRef={collect(spinGroups, 1)} pivotRef={collect(steerPivots, 1)} />
         <Wheel side={1} z={-WHEEL_Z} mats={mats} tireGeo={geo.tire} spinRef={collect(spinGroups, 2)} />
         <Wheel side={-1} z={-WHEEL_Z} mats={mats} tireGeo={geo.tire} spinRef={collect(spinGroups, 3)} />
+        </>
+        )}
       </group>
       </group>
 

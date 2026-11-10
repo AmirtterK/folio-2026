@@ -149,7 +149,7 @@ const HINT: React.CSSProperties = {
 
 export default function CarLab() {
   const [view, setView] = useState<View>("track");
-  const [color, setColor] = useState("#ff7a1a");
+  const [color, setColor] = useState("#8d9196");
   const [smokeOn, setSmokeOn] = useState(true);
   const [showCurbs, setShowCurbs] = useState(true);
   const [night, setNight] = useState(true);
@@ -413,6 +413,7 @@ export default function CarLab() {
                 start={TRACK_START}
                 maxSpeed={18}
                 carScale={0.65}
+                model="r17"
                 headlights={night}
               />
               <FolioTopDownCam
@@ -428,7 +429,7 @@ export default function CarLab() {
               <ambientLight intensity={0.8} />
               <hemisphereLight args={["#ffffff", "#555555", 0.5]} />
               <directionalLight position={[4, 7, 5]} intensity={1.2} />
-              <ToyCarSmoke color={color} keyboard={false} input={input} onSpeed={onSpeed} smoke={smokeOn} />
+              <ToyCarSmoke color={color} keyboard={false} input={input} onSpeed={onSpeed} smoke={smokeOn} model="r17" />
               <OrbitControls target={[0, 1, 0]} />
             </>
           )}

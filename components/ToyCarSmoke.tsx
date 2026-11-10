@@ -201,7 +201,8 @@ function useMaterials(color: string) {
       new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, metalness: 0.05, ...o });
     return {
       paint: new THREE.MeshPhysicalMaterial({
-        color, roughness: 0.28, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.08,
+        // Body_Paint is its own mesh: this lacquer is never reused by glass, trim or lighting.
+        color, metalness: 0.06, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.12,
       }),
       glass: new THREE.MeshPhysicalMaterial({
         color: "#22303d", roughness: 0.05, metalness: 0.6, clearcoat: 1,
@@ -593,7 +594,7 @@ function R17Body({
 /* ---------- car ---------- */
 
 export default function ToyCarSmoke({
-  color = "#8d9196",
+  color = "#5a3527",
   keyboard = true,
   input,
   maxSpeed = 14,

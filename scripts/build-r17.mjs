@@ -35,7 +35,9 @@ const TOL_R = 0.007;            // radial slack: the tread sits a little outside
 const TOL_Z = 0.004;            // axial slack
 const WHEELBASE_TARGET = 2.4;   // ToyCarSmoke's WHEEL_Z * 2
 const SCALE = WHEELBASE_TARGET / (AX_REAR - AX_FRONT);
-const CREASE_DEG = 38;          // normals are smoothed across edges flatter than this
+// Dense scan facets need a generous smoothing angle. True changes (lamp recesses, panel edges and wheel wells)
+// still remain separate meshes/materials below, so they do not need to be expressed as rough paint shading.
+const CREASE_DEG = 62;
 const WELL_R = 0.186;           // body faces within this radius of an axle are wheel-well liner
 const TIRE_RIM_SPLIT = 0.10;    // wheel faces beyond this radius are rubber, inside is rim/hub
 
@@ -411,7 +413,7 @@ WHEELS.forEach((w, wi) => {
 
 /* ---------------- 6. write GLB ---------------- */
 const MATERIAL_DEFS = {
-  paint:  { baseColorFactor: [0.93, 0.38, 0.08, 1], metallicFactor: 0.25, roughnessFactor: 0.35 },
+  paint:  { baseColorFactor: [0.28, 0.105, 0.045, 1], metallicFactor: 0.06, roughnessFactor: 0.2 },
   glass:  { baseColorFactor: [0.03, 0.045, 0.07, 1], metallicFactor: 0.6, roughnessFactor: 0.08 },
   trim:   { baseColorFactor: [0.035, 0.035, 0.04, 1], metallicFactor: 0.1, roughnessFactor: 0.65 },
   lamp:   { baseColorFactor: [0.95, 0.92, 0.78, 1], metallicFactor: 0.2, roughnessFactor: 0.15 },
@@ -438,22 +440,36 @@ function addPrimitive(p) {
   const aIdx = accessors.push({ bufferView: addBuffer(p.idx, 34963), componentType: 5125, count: p.idx.length, type: "SCALAR" }) - 1;
   return { attributes: { POSITION: aPos, NORMAL: aNor }, indices: aIdx, material: p.mat, mode: 4 };
 }
-const meshes = [
-  { name: "Body", primitives: bodyPrims.map(addPrimitive) },
-  ...WHEELS.map((w, i) => ({ name: `Wheel_${w.name}_mesh`, primitives: wheelPrims[i].map(addPrimitive) })),
-];
+// Keep every visual part in its own mesh node. This is deliberate: paint is never allowed to spill onto
+// glazing, lamps, trim, chrome, tires or rims simply because they share the scanned source mesh.
+const meshes = [];
+const bodyMeshIds = bodyPrims.map((p) => {
+  const id = meshes.length;
+  meshes.push({ name: `Body_${MATS[p.mat]}`, primitives: [addPrimitive(p)] });
+  return id;
+});
+const wheelMeshIds = WHEELS.map((w, wi) => wheelPrims[wi].map((p) => {
+  const id = meshes.length;
+  meshes.push({ name: `Wheel_${w.name}_${MATS[p.mat]}`, primitives: [addPrimitive(p)] });
+  return id;
+}));
 const axleCar = WHEELS.map((w) => toCar(w.ax, AX_Y, w.zc));
 const round = (a) => a.map((v) => +v.toFixed(5));
+const bodyNodeIds = bodyMeshIds.map((_, i) => 8 + i);
+let nextNodeId = 8 + bodyMeshIds.length;
+const wheelPartNodeIds = wheelMeshIds.map((ids) => ids.map(() => nextNodeId++));
 const nodes = [
   { name: "R17", children: [1, 2, 3, 4, 5], extras: { forward: "+Z", up: "+Y", scale: SCALE, wheelRadius: RADIUS * SCALE, wheelbase: WHEELBASE_TARGET,
       frontAxleZ: axleCar[0][2], rearAxleZ: axleCar[2][2], wheelCenterX: axleCar[0][0], length: 1.899 * SCALE, width: 0.861 * SCALE, height: 0.602 * SCALE } },
-  { name: "Body", mesh: 0 },
+  { name: "Body", children: bodyNodeIds },
   { name: "Steer_FL", translation: round(axleCar[0]), children: [6] },
   { name: "Steer_FR", translation: round(axleCar[1]), children: [7] },
-  { name: "Wheel_RL", mesh: 3, translation: round(axleCar[2]) },
-  { name: "Wheel_RR", mesh: 4, translation: round(axleCar[3]) },
-  { name: "Wheel_FL", mesh: 1 },
-  { name: "Wheel_FR", mesh: 2 },
+  { name: "Wheel_RL", translation: round(axleCar[2]), children: wheelPartNodeIds[2] },
+  { name: "Wheel_RR", translation: round(axleCar[3]), children: wheelPartNodeIds[3] },
+  { name: "Wheel_FL", children: wheelPartNodeIds[0] },
+  { name: "Wheel_FR", children: wheelPartNodeIds[1] },
+  ...bodyPrims.map((p, i) => ({ name: `Body_${MATS[p.mat]}`, mesh: bodyMeshIds[i] })),
+  ...WHEELS.flatMap((w, wi) => wheelPrims[wi].map((p, pi) => ({ name: `Wheel_${w.name}_${MATS[p.mat]}`, mesh: wheelMeshIds[wi][pi] }))),
 ];
 const gltf = {
   asset: { version: "2.0", generator: "build-r17.mjs" },

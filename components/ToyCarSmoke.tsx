@@ -544,34 +544,6 @@ function HeadlightSide({ x, level, y = 0.86, z = 2.0 }: { x: number; level: Muta
 
 /* ---------- Renault R17 body ---------- */
 
-/** Loads the R17 GLB, repaints it with the shared materials and hands the wheel / steering nodes to the physics. */
-function R17GlassPanels() {
-  const geometry = useMemo(() => {
-    // The source scan cannot provide a reliable window edge. This is an intentional R17 side-glass outline:
-    // straight sill/end edges, then a quadratic roof curve. The closed shape is filled as one panel.
-    const shape = new THREE.Shape();
-    shape.moveTo(0.905, 0.844);
-    shape.lineTo(-1.811, 0.844);
-    shape.lineTo(-1.811, 1.044);
-    shape.quadraticCurveTo(-0.421, 1.31, 0.905, 1.061);
-    shape.closePath();
-    return new THREE.ShapeGeometry(shape, 48);
-  }, []);
-  const material = useMemo(() => new THREE.MeshPhysicalMaterial({
-    color: "#101820", metalness: 0.15, roughness: 0.07,
-    clearcoat: 1, clearcoatRoughness: 0.04, side: THREE.DoubleSide,
-  }), []);
-
-  useEffect(() => () => { geometry.dispose(); material.dispose(); }, [geometry, material]);
-
-  return (
-    <>
-      <mesh geometry={geometry} material={material} position={[0.914, 0, 0]} rotation={[0, -Math.PI / 2, 0]} renderOrder={2} />
-      <mesh geometry={geometry} material={material} position={[-0.914, 0, 0]} rotation={[0, -Math.PI / 2, 0]} renderOrder={2} />
-    </>
-  );
-}
-
 function R17Body({
   mats,
   spinGroups,
@@ -598,9 +570,7 @@ function R17Body({
   // GLB material names -> the shared materials, so the `color` prop still repaints the car
   useLayoutEffect(() => {
     const map: Record<string, THREE.Material> = {
-      // The scanned glass triangles remain part of the continuous paint shell. Separate analytic panels
-      // below provide the crisp glass outline instead of exposing the scan's brushy material boundary.
-      paint: mats.paint, glass: mats.paint, trim: mats.trim, lamp: mats.lamp,
+      paint: mats.paint, glass: mats.glass, trim: mats.trim, lamp: mats.lamp,
       tail: mats.tail, chrome: mats.chrome, tire: mats.tire, rim: mats.chrome,
     };
     root.traverse((o) => {
@@ -619,7 +589,6 @@ function R17Body({
   return (
     <group position={[0, 0, R17_Z_SHIFT]}>
       <primitive object={root} />
-      <R17GlassPanels />
     </group>
   );
 }

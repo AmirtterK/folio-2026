@@ -182,18 +182,23 @@ for (let f = 0; f < nF; f++) {
   if (cx < -0.88 && cy > -0.18 && cy < -0.115 && az < 0.40 && ny > -0.55) m = M.chrome;
   matOfFace[f] = m;
 }
-// Paint / glass / trim borders are NOT taken from per-triangle labels (that follows the scan's mesh and looks
-// hand-painted). Instead every vertex gets a smooth class score, the scores are relaxed across the surface so the
-// borders become clean curves, and triangles that straddle a border are CUT along it (see emitBodyFace below).
+// Paint is a single, filled shell. The only cuts made into it are deliberate window and underbody outlines.
+// This prevents the scanned triangles from turning the body colour into a patchwork of material islands.
+function isGlassPanel(cx, cy, cz) {
+  const az = Math.abs(cz);
+  // Straight belt/end lines and a curved roofline form the R17's long pillarless glass area.
+  const roofline = 0.286 - 0.105 * ((cx - 0.2) / 0.7) ** 2;
+  const sideWindow = az > 0.345 && cx > -0.43 && cx < 0.86 && cy > BELT && cy < roofline;
+  const windshield = az <= 0.345 && cx > -0.43 && cx < -0.105 && cy > BELT && cy < 0.255;
+  const hatchWindow = az <= 0.345 && cx > 0.495 && cx < 0.835 && cy > BELT && cy < 0.235;
+  return sideWindow || windshield || hatchWindow;
+}
 function classifyPoint(cx, cy, cz, nx, ny) {
   const az = Math.abs(cz);
   if (az > 0.2 && az < 0.388 && (Math.hypot(cx - AX_FRONT, cy - AX_Y) < WELL_R || Math.hypot(cx - AX_REAR, cy - AX_Y) < WELL_R)) return M.trim;
-  let m = M.paint;
-  if (cy > BELT && ny < 0.8 && cx > SIDE_GLASS_X[0] && cx < SIDE_GLASS_X[1]) m = M.glass;
-  if (cx > WINDSHIELD.x0 && cx < WINDSHIELD.x1 && cy > WINDSHIELD.y0 && az < WINDSHIELD.z && ny > 0.5 && ny < 0.97) m = M.glass;
-  if (cx > HATCH_GLASS.x0 && cx < HATCH_GLASS.x1 && cy > HATCH_GLASS.y0 && az < HATCH_GLASS.z && ny > 0.5 && ny < 0.97) m = M.glass;
-  if (ny < -0.55 && !(az > 0.38 && cy > -0.2)) m = M.trim;
-  return m;
+  if (isGlassPanel(cx, cy, cz)) return M.glass;
+  if (ny < -0.55 && !(az > 0.38 && cy > -0.2)) return M.trim;
+  return M.paint;
 }
 const NCLS = 3; // 0 paint, 1 glass, 2 trim
 const VN = new Float64Array(nV * 3);
@@ -210,7 +215,8 @@ for (let v = 0; v < nV; v++) {
 }
 let S = new Float32Array(nV * NCLS);
 for (let v = 0; v < nV; v++) if (bodyVert[v]) S[v * NCLS + classifyPoint(P[v * 3], P[v * 3 + 1], P[v * 3 + 2], VN[v * 3], VN[v * 3 + 1])] = 1;
-const RELAX_ITERS = 14, RELAX_KEEP = 0.35;
+// These labels are analytic already; diffusing them over the scan topology causes boundary drift.
+const RELAX_ITERS = 0, RELAX_KEEP = 1;
 for (let it = 0; it < RELAX_ITERS; it++) {
   const out = new Float32Array(nV * NCLS);
   for (let v = 0; v < nV; v++) {

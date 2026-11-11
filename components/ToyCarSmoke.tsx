@@ -67,8 +67,12 @@ export type ToyCarSmokeProps = {
   start?: { x: number; z: number; yaw?: number };
   /** Optional scale factor for the car (default 1.0). */
   carScale?: number;
-  /** Car body: the original procedural toy car, or the Renault R17 GLB (public/models/r17.glb, built by scripts/build-r17.mjs). */
-  model?: "toy" | "r17";
+  /**
+   * Car body: the original procedural toy car, the Renault R17 GLB (public/models/r17.glb, built by scripts/build-r17.mjs),
+   * or the Ferrari SF90 GLB (public/models/sf90.glb, built by scripts/build-sf90.mjs). The SF90 has no headlights,
+   * ONE exhaust plume from the middle of the rear, and a small red dot light at the back instead of light bars.
+   */
+  model?: "toy" | "r17" | "sf90";
   /** Front lights: real beams, glowing lenses and a light cone. */
   headlights?: boolean;
   /** How visible the light cone is (1 at night, lower in daylight). */
@@ -91,6 +95,14 @@ const R17_WHEEL_X = 0.698;
 const R17_Z_SHIFT = -0.04; // the GLB's axles sit at z = 1.24 / -1.16; shift so they are at +-1.2 like the toy car
 const R17_EXHAUST = { x: 0.45, y: 0.32, z: -2.1 };
 const R17_LAMP = { x: 0.54, y: 0.6, z: 1.92 };
+
+/* Ferrari SF90 (scripts/build-sf90.mjs): same wheelbase as the toy car, small F1 wheels, one centre exhaust. Credit: "Ferrari F1 2019" by vecarz, CC-BY-4.0. */
+const SF90_URL = "/models/sf90.glb";
+const SF90_SCALE = 1.5; // the F1 is long and low next to the R17, so it is shown 1.5x bigger than the 2.4 wheelbase build
+const SF90_WHEEL_R = 0.2016 * SF90_SCALE;
+const SF90_WHEEL_X = 0.523 * SF90_SCALE;
+const SF90_EXHAUST = { x: 0, y: 0.36 * SF90_SCALE, z: -1.34 * SF90_SCALE }; // the single exhaust tip, centre line, just behind the engine cover
+const SF90_DOT = { y: 0.285, z: -1.64 };           // red dot light on the tip of the rear crash structure, centre line (unscaled: it sits inside the scaled group)
 const LUGS = 28;
 const SPOKE_PAIRS = 5;
 const DEFAULT_BOUNDS = { minX: -235, maxX: 235, minZ: -235, maxZ: 235 };
@@ -201,8 +213,7 @@ function useMaterials(color: string) {
       new THREE.MeshStandardMaterial({ color: c, roughness: 0.6, metalness: 0.05, ...o });
     return {
       paint: new THREE.MeshPhysicalMaterial({
-        // Body_Paint is its own mesh: this lacquer is never reused by glass, trim or lighting.
-        color, metalness: 0.06, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.12,
+        color, roughness: 0.28, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.08,
       }),
       glass: new THREE.MeshPhysicalMaterial({
         color: "#22303d", roughness: 0.05, metalness: 0.6, clearcoat: 1,
@@ -284,7 +295,10 @@ type Smoke = ReturnType<typeof createSmoke>;
 /** Tailpipe positions (side +x and -x) and car velocity in world space, used when the car really drives. */
 type Exhaust = { p: THREE.Vector3; n: THREE.Vector3; vx: number; vz: number };
 
-function spawnPuff(sm: Smoke, speed: number, throttle: number, ex?: Exhaust) {
+/** Where the smoke comes out in car space (x = 0 means a single centre exhaust). */
+type Pipe = { x: number; y: number; z: number };
+
+function spawnPuff(sm: Smoke, speed: number, throttle: number, pipe: Pipe, ex?: Exhaust) {
   const i = sm.head;
   sm.head = (sm.head + 1) % SMOKE_MAX;
   const side = sm.count++ % 2 ? 1 : -1;
@@ -297,12 +311,12 @@ function spawnPuff(sm: Smoke, speed: number, throttle: number, ex?: Exhaust) {
     sm.vel[i * 3 + 1] = 0.35 + Math.random() * 0.45;
     sm.vel[i * 3 + 2] = ex.vz * 0.25 + (Math.random() - 0.5) * 0.4;
   } else {
-    pos.setXYZ(i, side * EXHAUST_X + (Math.random() - 0.5) * 0.05, EXHAUST_Y, EXHAUST_Z);
+    pos.setXYZ(i, side * pipe.x + (Math.random() - 0.5) * 0.05, pipe.y, pipe.z);
 
     // car stays in place: air rushes past it, blowing the smoke backward (none is spawned when reversing)
     const dir = -1;
     const flow = Math.abs(speed) * 0.8 + 1.0;
-    sm.vel[i * 3] = side * 0.12 + (Math.random() - 0.5) * 0.35;
+    sm.vel[i * 3] = (pipe.x === 0 ? 0 : side * 0.12) + (Math.random() - 0.5) * 0.35; // a single centre pipe must not split into two streams
     sm.vel[i * 3 + 1] = 0.35 + Math.random() * 0.45;
     sm.vel[i * 3 + 2] = dir * flow * (0.8 + Math.random() * 0.4);
   }
@@ -312,14 +326,14 @@ function spawnPuff(sm: Smoke, speed: number, throttle: number, ex?: Exhaust) {
   sm.a0[i] = throttle !== 0 ? 0.5 : 0.28; // thicker puffs under throttle
 }
 
-function updateSmoke(sm: Smoke, dt: number, speed: number, throttle: number, on: boolean, ex?: Exhaust) {
+function updateSmoke(sm: Smoke, dt: number, speed: number, throttle: number, on: boolean, pipe: Pipe, ex?: Exhaust) {
   // no smoke while reversing (reverse pedal held, or still rolling backward)
   const reversing = throttle < 0 || speed < -0.05;
   const rate = !on || reversing ? 0 : throttle !== 0 ? Math.min(45, 12 + Math.abs(speed) * 3) : Math.min(7, Math.abs(speed) * 0.8);
   sm.acc = reversing ? 0 : sm.acc + rate * dt;
   while (sm.acc >= 1) {
     sm.acc -= 1;
-    spawnPuff(sm, speed, throttle, ex);
+    spawnPuff(sm, speed, throttle, pipe, ex);
   }
 
   const pos = sm.geo.attributes.position as THREE.BufferAttribute;
@@ -591,6 +605,83 @@ function R17Body({
   );
 }
 
+/* ---------- Ferrari SF90 body ---------- */
+
+/** Loads the SF90 GLB and hands its wheel / steering nodes to the physics. It keeps its own livery and materials (the paint colour does not apply). */
+function Sf90Body({
+  spinGroups,
+  steerPivots,
+  cast,
+}: {
+  spinGroups: MutableRefObject<THREE.Group[]>;
+  steerPivots: MutableRefObject<THREE.Group[]>;
+  cast: boolean;
+}) {
+  const gltf = useGLTF(SF90_URL);
+  const root = useMemo(() => {
+    const r = gltf.scene.clone(true);
+    r.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) m.castShadow = cast;
+    });
+    return r;
+  }, [gltf, cast]);
+
+  useLayoutEffect(() => {
+    const get = (n: string) => root.getObjectByName(n) as THREE.Group;
+    // same order as the toy car: 0 front +x, 1 front -x, 2 rear +x, 3 rear -x
+    spinGroups.current = [get("Wheel_FL"), get("Wheel_FR"), get("Wheel_RL"), get("Wheel_RR")];
+    steerPivots.current = [get("Steer_FL"), get("Steer_FR")];
+  }, [root, spinGroups, steerPivots]);
+
+  return <primitive object={root} />;
+}
+
+let redGlowTexCache: THREE.CanvasTexture | null = null;
+
+function redGlowTexture() {
+  if (!redGlowTexCache) {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 64;
+    const ctx = canvas.getContext("2d")!;
+    const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, "rgba(255,160,150,1)");
+    g.addColorStop(0.3, "rgba(255,40,30,0.7)");
+    g.addColorStop(1, "rgba(255,20,20,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 64, 64);
+    redGlowTexCache = new THREE.CanvasTexture(canvas);
+  }
+  return redGlowTexCache;
+}
+
+/** One small red dot light at the back (instead of light bars) with a soft halo. It flares up when braking or reversing, like the other tail lights. */
+function RearDot({ mats, y, z }: { mats: Mats; y: number; z: number }) {
+  const halo = useRef<THREE.Sprite>(null);
+  const glow = useMemo(() => redGlowTexture(), []);
+
+  useFrame(() => {
+    // mats.tail.emissiveIntensity is ~0.6-1.0 normally and jumps by 1.6 under braking
+    const t = Math.min(1, Math.max(0, (mats.tail.emissiveIntensity - 0.6) / 1.9));
+    const h = halo.current;
+    if (h) {
+      (h.material as THREE.SpriteMaterial).opacity = 0.35 + 0.55 * t;
+      h.scale.setScalar(0.28 + 0.2 * t);
+    }
+  });
+
+  return (
+    <>
+      <mesh position={[0, y, z]} material={mats.tail}>
+        <sphereGeometry args={[0.045, 16, 12]} />
+      </mesh>
+      <sprite ref={halo} position={[0, y, z - 0.03]} scale={[0.28, 0.28, 1]}>
+        <spriteMaterial map={glow} transparent depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} opacity={0.35} />
+      </sprite>
+    </>
+  );
+}
+
 /* ---------- car ---------- */
 
 export default function ToyCarSmoke({
@@ -615,11 +706,13 @@ export default function ToyCarSmoke({
   ...groupProps
 }: ToyCarSmokeProps) {
   const r17 = model === "r17";
-  const wheelR = r17 ? R17_WHEEL_R : WHEEL_R;
-  const trackX = r17 ? R17_WHEEL_X : WHEEL_X;
-  const exX = r17 ? R17_EXHAUST.x : EXHAUST_X;
-  const exY = r17 ? R17_EXHAUST.y : EXHAUST_Y;
-  const exZ = r17 ? R17_EXHAUST.z : EXHAUST_Z;
+  const sf90 = model === "sf90";
+  const wheelR = sf90 ? SF90_WHEEL_R : r17 ? R17_WHEEL_R : WHEEL_R;
+  const trackX = sf90 ? SF90_WHEEL_X : r17 ? R17_WHEEL_X : WHEEL_X;
+  const exX = sf90 ? SF90_EXHAUST.x : r17 ? R17_EXHAUST.x : EXHAUST_X;
+  const exY = sf90 ? SF90_EXHAUST.y : r17 ? R17_EXHAUST.y : EXHAUST_Y;
+  const exZ = sf90 ? SF90_EXHAUST.z : r17 ? R17_EXHAUST.z : EXHAUST_Z;
+  const pipe = useMemo<Pipe>(() => ({ x: exX, y: exY, z: exZ }), [exX, exY, exZ]);
   const carRef = useRef<THREE.Group>(null);
   const spinGroups = useRef<THREE.Group[]>([]);
   const steerPivots = useRef<THREE.Group[]>([]);
@@ -893,7 +986,7 @@ export default function ToyCarSmoke({
 
     // smoke
     smoke.mat.uniforms.uHeight.value = state.size.height * state.gl.getPixelRatio();
-    updateSmoke(smoke, dt, s.speed, throttle, smokeOn, terrain ? exhaust : undefined);
+    updateSmoke(smoke, dt, s.speed, throttle, smokeOn, pipe, terrain ? exhaust : undefined);
 
     onSpeed?.(s.speed);
   });
@@ -913,7 +1006,18 @@ export default function ToyCarSmoke({
             ))}
           </>
         )}
-        {!r17 && (
+        {sf90 && (
+          <>
+            {/* no headlights on this one: a single red dot light at the back, one smoke plume from the rear middle */}
+            <group scale={SF90_SCALE}>
+              <Suspense fallback={null}>
+                <Sf90Body spinGroups={spinGroups} steerPivots={steerPivots} cast={driving} />
+              </Suspense>
+              <RearDot mats={mats} y={SF90_DOT.y} z={SF90_DOT.z} />
+            </group>
+          </>
+        )}
+        {!r17 && !sf90 && (
         <>
         {/* shell */}
         <mesh geometry={geo.body} material={mats.paint} />

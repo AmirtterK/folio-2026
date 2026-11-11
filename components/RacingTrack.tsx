@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { MutableRefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
@@ -421,7 +421,119 @@ function createGlowTexture(): THREE.CanvasTexture {
 
 /* ---------- Street lamps along the outside of the corners (night only) ---------- */
 
-function TrackLamps({ geometry }: { geometry: THREE.BufferGeometry }) {
+type Lamp = { x: number; z: number; rot: number };
+
+const LAMP_HEAD = { out: 1.8, y: 5.25 }; // where the light head sits, in the lamp's local space
+const LAMP_LIGHTS = 4; // real spotlights in the pool (constant count, so no shader recompiles)
+const LAMP_FADE_NEAR = 16; // full strength inside this distance from the car
+const LAMP_FADE_FAR = 48; // completely off beyond this distance
+const LAMP_INTENSITY = 750;
+
+/**
+ * Real light from the street lamps. A small pool of spotlights is moved onto the lamps nearest the car every
+ * frame and faded by distance, so the car, track and grass are actually lit (and the paint catches the highlights)
+ * without paying for one light per lamp.
+ */
+function LampLights({ lamps, pose }: { lamps: Lamp[]; pose?: MutableRefObject<CarPose> }) {
+  const lights = useRef<(THREE.SpotLight | null)[]>([]);
+  const targets = useRef<(THREE.Object3D | null)[]>([]);
+  const heads = useMemo(
+    () =>
+      lamps.map(
+        (l) =>
+          new THREE.Vector3(
+            l.x + LAMP_HEAD.out * Math.cos(l.rot),
+            LAMP_HEAD.y,
+            l.z - LAMP_HEAD.out * Math.sin(l.rot)
+          )
+      ),
+    [lamps]
+  );
+  const scratch = useMemo(
+    () => ({ idx: new Int16Array(LAMP_LIGHTS), dist: new Float32Array(LAMP_LIGHTS) }),
+    []
+  );
+
+  useEffect(() => {
+    lights.current.forEach((l, i) => {
+      const t = targets.current[i];
+      if (l && t) l.target = t;
+    });
+  }, []);
+
+  useFrame(() => {
+    const cx = pose ? pose.current.x : 0;
+    const cz = pose ? pose.current.z : 0;
+    const { idx, dist } = scratch;
+    idx.fill(-1);
+    dist.fill(Infinity);
+
+    // pick the LAMP_LIGHTS nearest lamps (tiny insertion sort, ~20 lamps)
+    for (let i = 0; i < heads.length; i++) {
+      const dx = heads[i].x - cx;
+      const dz = heads[i].z - cz;
+      const d = Math.sqrt(dx * dx + dz * dz);
+      let slot = LAMP_LIGHTS;
+      while (slot > 0 && d < dist[slot - 1]) slot--;
+      if (slot >= LAMP_LIGHTS) continue;
+      for (let j = LAMP_LIGHTS - 1; j > slot; j--) {
+        dist[j] = dist[j - 1];
+        idx[j] = idx[j - 1];
+      }
+      dist[slot] = d;
+      idx[slot] = i;
+    }
+
+    for (let k = 0; k < LAMP_LIGHTS; k++) {
+      const light = lights.current[k];
+      const target = targets.current[k];
+      if (!light || !target) continue;
+      const i = idx[k];
+      if (i < 0) {
+        light.intensity = 0;
+        continue;
+      }
+      const h = heads[i];
+      light.position.copy(h);
+      target.position.set(h.x, h.y - 10, h.z); // straight down
+      const t = Math.min(1, Math.max(0, (dist[k] - LAMP_FADE_NEAR) / (LAMP_FADE_FAR - LAMP_FADE_NEAR)));
+      light.intensity = LAMP_INTENSITY * (1 - t * t * (3 - 2 * t)); // smoothstep fade, so lights never pop
+    }
+  });
+
+  return (
+    <>
+      {Array.from({ length: LAMP_LIGHTS }, (_, k) => (
+        <group key={k}>
+          <spotLight
+            ref={(el) => {
+              lights.current[k] = el;
+            }}
+            color="#ffc878"
+            intensity={0}
+            angle={1.2}
+            penumbra={1}
+            distance={55}
+            decay={2}
+          />
+          <object3D
+            ref={(el) => {
+              targets.current[k] = el;
+            }}
+          />
+        </group>
+      ))}
+    </>
+  );
+}
+
+function TrackLamps({
+  geometry,
+  pose,
+}: {
+  geometry: THREE.BufferGeometry;
+  pose?: MutableRefObject<CarPose>;
+}) {
   const glow = useMemo(() => createGlowTexture(), []);
   const mats = useMemo(
     () => ({
@@ -431,7 +543,7 @@ function TrackLamps({ geometry }: { geometry: THREE.BufferGeometry }) {
         map: glow,
         color: "#ffc66b",
         transparent: true,
-        opacity: 0.5,
+        opacity: 0.22, // just a soft halo now — the real light comes from LampLights
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         toneMapped: false,
@@ -470,6 +582,7 @@ function TrackLamps({ geometry }: { geometry: THREE.BufferGeometry }) {
 
   return (
     <group>
+      <LampLights lamps={lamps} pose={pose} />
       {lamps.map((l, i) => (
         <group key={i} position={[l.x, 0, l.z]} rotation={[0, l.rot, 0]}>
           <mesh position={[0, 2.7, 0]} material={mats.pole} castShadow>
@@ -497,9 +610,11 @@ type RacingTrackProps = {
   /** When true (default), the heightfield `Terrain` paints the realistic grass + gravel without self-intersecting ribbon geometry. */
   withTerrain?: boolean;
   night?: boolean;
+  /** Car pose, used to put the real street-lamp lights on the lamps nearest the car. */
+  pose?: MutableRefObject<CarPose>;
 };
 
-export function RacingTrack({ showCurbs = true, night = false, withTerrain = true }: RacingTrackProps) {
+export function RacingTrack({ showCurbs = true, night = false, withTerrain = true, pose }: RacingTrackProps) {
   const groundMaterial = useMemo(
     () => (withTerrain ? undefined : new THREE.MeshStandardMaterial({ map: createGroundTexture(), roughness: 0.96, metalness: 0 })),
     [withTerrain]
@@ -549,7 +664,7 @@ export function RacingTrack({ showCurbs = true, night = false, withTerrain = tru
         </mesh>
       )}
 
-      {night && <TrackLamps geometry={monzaGeometry} />}
+      {night && <TrackLamps geometry={monzaGeometry} pose={pose} />}
 
       {/* Monza Asphalt Road Ribbon with Flat Red & White Pavement Curbs */}
       <mesh
@@ -591,12 +706,15 @@ export function FolioTopDownCam({
   inspecting = false,
   inspectTarget,
   inspectCamPos,
+  freeCam = false,
 }: {
   pose: MutableRefObject<CarPose>;
   zoomMultiplier?: number;
   inspecting?: boolean;
   inspectTarget?: THREE.Vector3;
   inspectCamPos?: THREE.Vector3;
+  /** When true this component stops touching the camera (OrbitControls owns it). On exit it blends back. */
+  freeCam?: boolean;
 }) {
   const camera = useThree((s) => s.camera);
   const st = useRef({
@@ -604,6 +722,13 @@ export function FolioTopDownCam({
     smoothedTarget: new THREE.Vector3(),
     currentRadius: 32,
     inspectAlpha: 0,
+    wasFree: false,
+    returning: false,
+    returnT: 0,
+    fromPos: new THREE.Vector3(),
+    fromQuat: new THREE.Quaternion(),
+    tmpMat: new THREE.Matrix4(),
+    tmpQuat: new THREE.Quaternion(),
   });
 
   useFrame((_, delta) => {
@@ -632,6 +757,23 @@ export function FolioTopDownCam({
     const targetRadius = baseRadius + speedZoom;
     s.currentRadius += (targetRadius - s.currentRadius) * (1 - Math.exp(-3.5 * dt));
 
+    // Free cam: leave the camera alone (OrbitControls drives it). We keep tracking the car above
+    // so the return trip lands on wherever the car is when free cam is closed.
+    if (freeCam) {
+      s.wasFree = true;
+      s.returning = false;
+      return;
+    }
+
+    // Just left free cam: remember where the free camera was so we can glide back from it.
+    if (s.wasFree) {
+      s.wasFree = false;
+      s.returning = true;
+      s.returnT = 0;
+      s.fromPos.copy(camera.position);
+      s.fromQuat.copy(camera.quaternion);
+    }
+
     // High-angle top-down view aligned straight with the track axes (theta = 0)
     const phi = Math.PI * 0.16; // ~28.8° tilt from overhead for rich 3D depth
     const r = s.currentRadius;
@@ -644,6 +786,18 @@ export function FolioTopDownCam({
       s.smoothedTarget.y + offsetY,
       s.smoothedTarget.z + offsetZ
     );
+
+    if (s.returning) {
+      // Ease from the free-cam pose back to the regular chase view (~0.8s)
+      s.returnT = Math.min(1, s.returnT + dt / 0.8);
+      const e = 1 - Math.pow(1 - s.returnT, 3);
+      camera.position.lerpVectors(s.fromPos, driveCamPos, e);
+      s.tmpMat.lookAt(driveCamPos, s.smoothedTarget, camera.up);
+      s.tmpQuat.setFromRotationMatrix(s.tmpMat);
+      camera.quaternion.slerpQuaternions(s.fromQuat, s.tmpQuat, e);
+      if (s.returnT >= 1) s.returning = false;
+      return;
+    }
 
     if (s.inspectAlpha > 0.001 && inspectCamPos) {
       // Smoothly blend position between driving overhead and inspection angle

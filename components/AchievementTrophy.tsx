@@ -33,7 +33,7 @@ const PANEL_Y = 1.6;
 
 /** Hologram projection: a round lens in the right face of the base, a beam out to the bottom edge of the panel */
 const PANEL_BOTTOM = PANEL_Y - (PANEL_H * PANEL_SCALE) / 2;
-const LENS_X = 0.373; // just outside the right face of the upper base block (half-width 0.37)
+const LENS_X = 0.376; // just outside the right face of the upper base block (half-width 0.37); a few mm of clearance so it never z-fights, even from far away
 const LENS_Y = 0.355; // centre height of the upper base block
 const LENS_R = 0.1;
 const BEAM_TOP_W = PANEL_W * PANEL_SCALE;
@@ -419,7 +419,7 @@ export default function AchievementTrophy({
     return {
       // base (sized to the slimmer trophy)
       baseLow: new THREE.BoxGeometry(0.96, 0.18, 0.96),
-      baseHigh: new THREE.BoxGeometry(0.74, 0.29, 0.74),
+      baseHigh: new THREE.BoxGeometry(0.74, 0.28, 0.74), // top at y 0.49, tucked just under the trim (0.475..0.5) so no faces are coplanar
       baseTrim: new THREE.BoxGeometry(0.8, 0.03, 0.8),
       baseTopTrim: new THREE.BoxGeometry(0.78, 0.025, 0.78),
       plaque: new THREE.BoxGeometry(0.36, 0.12, 0.012),
@@ -567,7 +567,7 @@ export default function AchievementTrophy({
       {/* Black square base: gold trim, corner feet and spires, front plaque */}
       <mesh position={[0, 0.09, 0]} geometry={geos.baseLow} material={mats.baseBlack} castShadow receiveShadow />
       <mesh position={[0, 0.195, 0]} geometry={geos.baseTrim} material={mats.trimGold} />
-      <mesh position={[0, 0.355, 0]} geometry={geos.baseHigh} material={mats.baseBlack} castShadow receiveShadow />
+      <mesh position={[0, 0.35, 0]} geometry={geos.baseHigh} material={mats.baseBlack} castShadow receiveShadow />
       <mesh position={[0, 0.4875, 0]} geometry={geos.baseTopTrim} material={mats.trimGold} />
       <mesh position={[0, 0.34, 0.376]} geometry={geos.plaque} material={mats.trimGold} />
       {[
@@ -588,7 +588,7 @@ export default function AchievementTrophy({
       ))}
 
       {/* Royal lidded trophy */}
-      <group ref={trophyCupRef} position={[0, 0.5, 0]}>
+      <group ref={trophyCupRef} position={[0, 0.502, 0]}>
         {/* Stepped foot, slim stem and fluted knop */}
         <mesh geometry={geos.footStem} material={mats.goldFlat} castShadow />
         <Beads count={28} radius={0.296} y={0.033} geometry={geos.bead} material={mats.pearl} />

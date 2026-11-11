@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import ToyCarSmoke from "@/components/ToyCarSmoke";
 import type { CarInput } from "@/components/ToyCar";
@@ -22,9 +22,12 @@ import * as THREE from "three";
 import Minimap from "@/components/Minimap";
 import HandGestures from "@/components/HandGestures";
 import AchievementTrophy from "@/components/AchievementTrophy";
+import ChessKnight from "@/components/ChessKnight";
+import NeuralNetworkHologram from "@/components/NeuralNetworkHologram";
 import { TROPHY_POS } from "@/components/landmarkConfig";
 
 type View = "track" | "smoke" | "html";
+type CarModel = "r17" | "sf90";
 
 /* ---------- Loading Overlay ---------- */
 
@@ -102,6 +105,77 @@ function LoadingScreen({ progress, visible }: { progress: number; visible: boole
   );
 }
 
+/* ---------- Free cam (orbit / pan / zoom around the map) ---------- */
+
+function FreeCamControls({
+  pose,
+  input,
+}: {
+  pose: React.MutableRefObject<CarPose>;
+  input: React.MutableRefObject<CarInput>;
+}) {
+  const camera = useThree((s) => s.camera);
+  const controlsRef = useRef<any>(null);
+  const tmp = useMemo(
+    () => ({ fwd: new THREE.Vector3(), right: new THREE.Vector3(), move: new THREE.Vector3() }),
+    []
+  );
+  // Orbit around whatever the chase camera was looking at (the car) when free cam was opened.
+  // The camera keeps its current position, so entering free cam never jumps.
+  const target = useMemo(
+    () => new THREE.Vector3(pose.current.x, pose.current.y + 0.3, pose.current.z),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  // WASD fly the camera across the map (relative to where it is looking)
+  useFrame((_, delta) => {
+    const controls = controlsRef.current;
+    if (!controls) return;
+    const i = input.current;
+    const f = (i.fwd ? 1 : 0) - (i.back ? 1 : 0);
+    const r = (i.right ? 1 : 0) - (i.left ? 1 : 0);
+    if (!f && !r) return;
+
+    const dt = Math.min(delta, 0.05);
+    // forward = camera look direction flattened onto the ground
+    camera.getWorldDirection(tmp.fwd);
+    tmp.fwd.y = 0;
+    if (tmp.fwd.lengthSq() < 1e-6) tmp.fwd.set(0, 0, -1);
+    tmp.fwd.normalize();
+    tmp.right.set(-tmp.fwd.z, 0, tmp.fwd.x);
+
+    // faster when zoomed out, slower when zoomed in close
+    const dist = camera.position.distanceTo(controls.target);
+    const speed = Math.max(6, dist * 0.9);
+
+    tmp.move
+      .set(0, 0, 0)
+      .addScaledVector(tmp.fwd, f)
+      .addScaledVector(tmp.right, r)
+      .normalize()
+      .multiplyScalar(speed * dt);
+    camera.position.add(tmp.move);
+    controls.target.add(tmp.move);
+  });
+
+  return (
+    <OrbitControls
+      ref={controlsRef}
+      target={target}
+      enableDamping
+      dampingFactor={0.08}
+      zoomSpeed={1.2}
+      panSpeed={1.1}
+      rotateSpeed={0.8}
+      minDistance={2}
+      maxDistance={450}
+      maxPolarAngle={Math.PI * 0.49} // can't dip under the ground
+      screenSpacePanning={false} // right-drag slides across the map instead of up/down
+    />
+  );
+}
+
 const KEY_MAP: Record<string, keyof CarInput> = {
   KeyW: "fwd",
   ArrowUp: "fwd",
@@ -112,6 +186,14 @@ const KEY_MAP: Record<string, keyof CarInput> = {
   KeyD: "right",
   ArrowRight: "right",
   Space: "brake",
+};
+
+/** In free cam, WASD moves the camera (arrows keep driving the car). */
+const CAM_KEYS: Record<string, "fwd" | "back" | "left" | "right"> = {
+  KeyW: "fwd",
+  KeyS: "back",
+  KeyA: "left",
+  KeyD: "right",
 };
 
 const BTN: React.CSSProperties = {
@@ -150,6 +232,7 @@ const HINT: React.CSSProperties = {
 export default function CarLab() {
   const [view, setView] = useState<View>("track");
   const [color, setColor] = useState("#8d9196");
+  const [carModel, setCarModel] = useState<CarModel>("r17");
   const [smokeOn, setSmokeOn] = useState(true);
   const [showCurbs, setShowCurbs] = useState(true);
   const [night, setNight] = useState(true);
@@ -167,6 +250,9 @@ export default function CarLab() {
     speed: 0,
   });
   const [gestures, setGestures] = useState(false);
+  const [freeCam, setFreeCam] = useState(false);
+  const freeCamRef = useRef(false);
+  freeCamRef.current = freeCam;
 
   /* ---- Landmark Achievement Inspection State ---- */
   const [inspectingTrophy, setInspectingTrophy] = useState(false);
@@ -177,6 +263,8 @@ export default function CarLab() {
   inspectingTrophyRef.current = inspectingTrophy;
 
   const emptyInput = useRef<CarInput>({ fwd: 0, back: 0, left: 0, right: 0, brake: 1 });
+  // Free-cam movement keys (WASD) — kept separate from the car's input so arrows can still drive
+  const camKeys = useRef<CarInput>({ fwd: 0, back: 0, left: 0, right: 0, brake: 0 });
 
   const handleTrophyNearChange = useCallback((near: boolean) => {
     setIsNearTrophy(near);
@@ -239,7 +327,8 @@ export default function CarLab() {
 
   const set = (k: keyof CarInput, v: 0 | 1) => {
     input.current[k] = v;
-    setPressed((p) => ({ ...p, [k]: !!v }));
+    // return the same object when nothing changed, so key auto-repeat doesn't re-render the whole scene every keydown
+    setPressed((p) => (!!p[k] === !!v ? p : { ...p, [k]: !!v }));
   };
 
   const resetCar = useCallback(() => {
@@ -254,6 +343,18 @@ export default function CarLab() {
   // Keyboard input
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      // Free cam: F toggles, Esc exits
+      if (e.code === "KeyF" && !e.repeat) {
+        setInspectingTrophy(false);
+        setFreeCam((v) => !v);
+        return;
+      }
+      if (e.code === "Escape" && freeCamRef.current) {
+        setFreeCam(false);
+        e.preventDefault();
+        return;
+      }
+
       // If inspecting, pressing ANY button immediately exits and returns to normal driving view
       if (inspectingTrophyRef.current) {
         setInspectingTrophy(false);
@@ -263,13 +364,21 @@ export default function CarLab() {
         }
       }
 
+      // Free cam: WASD moves the camera, arrows (handled below) still drive the car
+      const camK = CAM_KEYS[e.code];
+      if (freeCamRef.current && camK) {
+        camKeys.current[camK] = 1;
+        e.preventDefault();
+        return;
+      }
+
       const k = KEY_MAP[e.code];
       if (k) {
         set(k, 1);
         e.preventDefault();
       }
       if (e.code === "Enter" || e.code === "NumpadEnter") {
-        if (isNearTrophyRef.current) {
+        if (isNearTrophyRef.current && !freeCamRef.current) {
           setInspectingTrophy(true);
           e.preventDefault();
         }
@@ -282,6 +391,8 @@ export default function CarLab() {
       }
     };
     const up = (e: KeyboardEvent) => {
+      const camK = CAM_KEYS[e.code];
+      if (camK) camKeys.current[camK] = 0;
       const k = KEY_MAP[e.code];
       if (k) set(k, 0);
     };
@@ -296,11 +407,26 @@ export default function CarLab() {
   // Mouse wheel zoom in track view
   const handleWheel = useCallback(
     (e: WheelEvent) => {
-      if (view !== "track") return;
+      if (view !== "track" || freeCamRef.current) return; // free cam zooms via OrbitControls
       setZoomMultiplier((z) => Math.min(1.8, Math.max(0.65, z + e.deltaY * 0.001)));
     },
     [view]
   );
+
+  // Leaving the track view always ends free cam
+  useEffect(() => {
+    if (view !== "track") setFreeCam(false);
+  }, [view]);
+
+  // Entering/leaving free cam: drop any held movement so nothing gets stuck or drives off
+  useEffect(() => {
+    camKeys.current.fwd = camKeys.current.back = camKeys.current.left = camKeys.current.right = 0;
+    set("fwd", 0);
+    set("back", 0);
+    set("left", 0);
+    set("right", 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [freeCam]);
 
   useEffect(() => {
     window.addEventListener("wheel", handleWheel, { passive: true });
@@ -346,6 +472,32 @@ export default function CarLab() {
     </button>
   );
 
+  const carTab = (id: CarModel, text: string) => (
+    <button
+      onClick={() => {
+        if (id === carModel) return;
+        setCarModel(id);
+        resetCar(); // respawn on the grid with the new car
+      }}
+      style={{
+        padding: "6px 11px",
+        borderRadius: 9,
+        borderWidth: 1.5,
+        borderStyle: "solid",
+        borderColor: carModel === id ? "#ff7a1a" : "#cfc8bd",
+        cursor: "pointer",
+        backgroundColor: carModel === id ? "#ff7a1a" : "#fffdf9",
+        color: carModel === id ? "#ffffff" : "#2a2622",
+        font: "inherit",
+        fontSize: 12.5,
+        fontWeight: carModel === id ? 700 : 500,
+        boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+      }}
+    >
+      {text}
+    </button>
+  );
+
   const onSpeed = (s: number) => {
     if (speedRef.current) speedRef.current.textContent = Math.abs(s).toFixed(1);
   };
@@ -363,6 +515,7 @@ export default function CarLab() {
         <Canvas
           key={view === "track" ? "track" : "lab"}
           shadows
+          dpr={[1, 1.5]}
           camera={
             view === "track"
               ? { position: [20, 26, 20], fov: 26, near: 0.5, far: 800 }
@@ -373,7 +526,18 @@ export default function CarLab() {
           {view === "track" ? (
             <>
               <color attach="background" args={[night ? "#0a1238" : "#cbe2f2"]} />
-              <fog attach="fog" args={night ? ["#0c1747", 35, 230] : ["#cbe2f2", 80, 420]} />
+              <fog
+                attach="fog"
+                args={
+                  freeCam
+                    ? night
+                      ? ["#0c1747", 150, 780]
+                      : ["#cbe2f2", 250, 780]
+                    : night
+                      ? ["#0c1747", 35, 230]
+                      : ["#cbe2f2", 80, 420]
+                }
+              />
               <ambientLight intensity={night ? 0.55 : 0.7} color={night ? "#5a68ff" : "#ffffff"} />
               <hemisphereLight args={night ? ["#4a5cff", "#3a1a7a", 0.7] : ["#dbe9f6", "#739855", 0.55]} />
               <directionalLight
@@ -389,9 +553,12 @@ export default function CarLab() {
                 shadow-camera-top={75}
                 shadow-camera-bottom={-75}
                 shadow-bias={-0.0004}
+                shadow-normalBias={0.03}
               />
-              <RacingTrack showCurbs={showCurbs} night={night} withTerrain={true} />
+              <RacingTrack showCurbs={showCurbs} night={night} withTerrain={true} pose={pose} />
               <Terrain pose={pose} />
+              <ChessKnight night={night} />
+              <NeuralNetworkHologram night={night} />
               <AchievementTrophy
                 pose={pose}
                 inspecting={inspectingTrophy}
@@ -399,7 +566,7 @@ export default function CarLab() {
                 onInspectToggle={setInspectingTrophy}
               />
               <ToyCarSmoke
-                key={`car-${carResetKey}`}
+                key={`car-${carResetKey}-${carModel}`}
                 color={color}
                 keyboard={false}
                 input={inspectingTrophy ? emptyInput : input}
@@ -413,7 +580,7 @@ export default function CarLab() {
                 start={TRACK_START}
                 maxSpeed={18}
                 carScale={0.65}
-                model="r17"
+                model={carModel}
                 headlights={night}
               />
               <FolioTopDownCam
@@ -422,14 +589,16 @@ export default function CarLab() {
                 inspecting={inspectingTrophy}
                 inspectTarget={inspectTarget}
                 inspectCamPos={inspectCamPos}
+                freeCam={freeCam}
               />
+              {freeCam && <FreeCamControls pose={pose} input={camKeys} />}
             </>
           ) : (
             <>
               <ambientLight intensity={0.8} />
               <hemisphereLight args={["#ffffff", "#555555", 0.5]} />
               <directionalLight position={[4, 7, 5]} intensity={1.2} />
-              <ToyCarSmoke color={color} keyboard={false} input={input} onSpeed={onSpeed} smoke={smokeOn} model="r17" />
+              <ToyCarSmoke key={carModel} color={color} keyboard={false} input={input} onSpeed={onSpeed} smoke={smokeOn} model={carModel} />
               <OrbitControls target={[0, 1, 0]} />
             </>
           )}
@@ -460,6 +629,13 @@ export default function CarLab() {
         {tab("html", "Classic (HTML)")}
 
         {is3d && (
+          <div style={{ display: "flex", gap: 4, marginLeft: 8 }}>
+            {carTab("r17", "Renault R17")}
+            {carTab("sf90", "Ferrari SF90")}
+          </div>
+        )}
+
+        {is3d && carModel !== "sf90" && (
           <label
             style={{
               display: "flex",
@@ -560,6 +736,30 @@ export default function CarLab() {
               />
               Minimap
             </label>
+
+            <button
+              onClick={() => {
+                setInspectingTrophy(false);
+                setFreeCam((v) => !v);
+              }}
+              title="Free cam: orbit, pan and zoom around the map. Press F or Esc to return."
+              style={{
+                padding: "7px 12px",
+                borderRadius: 9,
+                borderWidth: 1.5,
+                borderStyle: "solid",
+                borderColor: freeCam ? "#ff7a1a" : "#cfc8bd",
+                backgroundColor: freeCam ? "#ff7a1a" : "#fffdf9",
+                color: freeCam ? "#ffffff" : "#2a2622",
+                fontSize: 12.5,
+                fontWeight: 600,
+                cursor: "pointer",
+                marginLeft: 4,
+                boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+              }}
+            >
+              {freeCam ? "✕ Exit free cam [F]" : "🎥 Free cam [F]"}
+            </button>
 
             <button
               onClick={resetCar}
@@ -669,7 +869,9 @@ export default function CarLab() {
 
       {view === "track" && (
         <div style={night ? { ...HINT, color: "#c9d1ff", textShadow: "0 1px 3px rgba(0,0,0,0.8)" } : HINT}>
-          WASD or Arrow Keys to steer • Space to brake • Scroll wheel to zoom • M for Minimap • R to reset
+          {freeCam
+            ? "FREE CAM • WASD to move camera • Arrows to drive • Drag to orbit • Right-drag to pan • Scroll to zoom • F or Esc to go back"
+            : "WASD or Arrow Keys to steer • Space to brake • Scroll wheel to zoom • M for Minimap • R to reset • F for free cam"}
         </div>
       )}
 

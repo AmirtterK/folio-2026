@@ -25,7 +25,7 @@ import { buildMonzaGeometry, periodicNoise } from "@/components/RacingTrack";
 import type { CarPose } from "@/components/ToyCarSmoke";
 import { TrackBarriers, BARRIER_POINTS } from "@/components/TrackBarriers";
 import { JumpArrowSigns, JUMP_SIGNS } from "@/components/JumpArrowSigns";
-import { TROPHY_POS } from "@/components/landmarkConfig";
+import { TROPHY_POS, KNIGHT_POS, NEURAL_POS } from "@/components/landmarkConfig";
 
 /* ---------- world layout ---------- */
 
@@ -529,6 +529,12 @@ function buildTerrain(): TerrainData {
 
   /* golden achievement trophy pedestal landmark */
   solids.push({ x: TROPHY_POS.x, z: TROPHY_POS.z, r: 1.05 });
+
+  /* holographic chess knight landmark */
+  solids.push({ x: KNIGHT_POS.x, z: KNIGHT_POS.z, r: 0.95 });
+
+  /* holographic neural network landmark */
+  solids.push({ x: NEURAL_POS.x, z: NEURAL_POS.z, r: 1.05 });
 
   /* loose stones lying in the gravel next to the asphalt */
   for (let tries = 0; tries < 8000 && pebbles.length < 1500; tries++) {

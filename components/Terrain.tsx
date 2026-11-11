@@ -758,33 +758,87 @@ function GrassField({ data, pose }: { data: TerrainData; pose?: MutableRefObject
 
 /* ---------- rendering ---------- */
 
+/** The instances near the car are re-picked only after the car has moved this far (world units). */
+const CULL_STEP = 4;
+
+/**
+ * Instanced scenery that only draws what is within `radius` of the car (everything when radius is Infinity,
+ * e.g. in free cam). Every item's matrix and colour is baked once; each time the car has moved CULL_STEP the
+ * nearby ones are copied to the front of the instance buffer and `count` is set, so far trees cost nothing
+ * in the main pass or the shadow pass.
+ */
 function Instances({
   geometry,
   material,
   items,
   cast = true,
+  pose,
+  radius = Infinity,
 }: {
   geometry: THREE.BufferGeometry;
   material: THREE.Material;
   items: Item[];
   cast?: boolean;
+  pose?: MutableRefObject<CarPose>;
+  radius?: number;
 }) {
   const ref = useRef<THREE.InstancedMesh>(null);
+  const last = useRef({ x: 0, z: 0, r: -1 });
+
+  const baked = useMemo(() => {
+    const mats = new Float32Array(items.length * 16);
+    const cols = new Float32Array(items.length * 3);
+    const d = new THREE.Object3D();
+    items.forEach((it, i) => {
+      d.position.set(it.x, it.y, it.z);
+      d.rotation.set(0, it.ry, 0);
+      d.scale.set(it.sx, it.sy, it.sz);
+      d.updateMatrix();
+      d.matrix.toArray(mats, i * 16);
+      cols[i * 3] = it.color.r;
+      cols[i * 3 + 1] = it.color.g;
+      cols[i * 3 + 2] = it.color.b;
+    });
+    return { mats, cols };
+  }, [items]);
+
   useLayoutEffect(() => {
     const m = ref.current;
     if (!m) return;
-    const dummy = new THREE.Object3D();
-    items.forEach((it, i) => {
-      dummy.position.set(it.x, it.y, it.z);
-      dummy.rotation.set(0, it.ry, 0);
-      dummy.scale.set(it.sx, it.sy, it.sz);
-      dummy.updateMatrix();
-      m.setMatrixAt(i, dummy.matrix);
-      m.setColorAt(i, it.color);
-    });
+    if (!m.instanceColor) m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(items.length * 3), 3);
+    last.current.r = -1; // force a fresh pick on the next frame
+  }, [items, baked]);
+
+  useFrame(() => {
+    const m = ref.current;
+    if (!m || !m.instanceColor) return;
+    const p = pose?.current;
+    const cx = p ? p.x : 0;
+    const cz = p ? p.z : 0;
+    const l = last.current;
+    if (l.r === radius && Math.hypot(cx - l.x, cz - l.z) < CULL_STEP) return;
+    l.x = cx;
+    l.z = cz;
+    l.r = radius;
+
+    const mArr = m.instanceMatrix.array as Float32Array;
+    const cArr = m.instanceColor.array as Float32Array;
+    const reach = radius + CULL_STEP; // margin so nothing pops in between two picks
+    const reach2 = reach * reach;
+    let n = 0;
+    for (let i = 0; i < items.length; i++) {
+      const dx = items[i].x - cx;
+      const dz = items[i].z - cz;
+      if (dx * dx + dz * dz > reach2) continue;
+      mArr.set(baked.mats.subarray(i * 16, i * 16 + 16), n * 16);
+      cArr.set(baked.cols.subarray(i * 3, i * 3 + 3), n * 3);
+      n++;
+    }
+    m.count = n;
     m.instanceMatrix.needsUpdate = true;
-    if (m.instanceColor) m.instanceColor.needsUpdate = true;
-  }, [items]);
+    m.instanceColor.needsUpdate = true;
+  });
+
   return <instancedMesh ref={ref} args={[geometry, material, items.length]} castShadow={cast} receiveShadow frustumCulled={false} />;
 }
 
@@ -800,7 +854,7 @@ function getSlabsTexture(): THREE.Texture {
   return cachedSlabsTex!;
 }
 
-export function Terrain({ pose }: { pose?: MutableRefObject<CarPose> }) {
+export function Terrain({ pose, radius = Infinity }: { pose?: MutableRefObject<CarPose>; radius?: number }) {
   const data = useMemo(() => getTerrain(), []);
 
   const slabsTex = useMemo(() => getSlabsTexture(), []);
@@ -903,11 +957,11 @@ export function Terrain({ pose }: { pose?: MutableRefObject<CarPose> }) {
       </mesh>
       <mesh geometry={data.geometry} material={material} receiveShadow />
       <GrassField data={data} pose={pose} />
-      <Instances geometry={geo.foliage} material={mats.foliage} items={data.trees} />
-      <Instances geometry={geo.trunk} material={mats.trunk} items={trunkItems} />
-      <Instances geometry={geo.bush} material={mats.bush} items={data.bushes} />
-      <Instances geometry={geo.rock} material={mats.rock} items={data.rocks} />
-      <Instances geometry={geo.stone} material={mats.stone} items={data.pebbles} cast={false} />
+      <Instances geometry={geo.foliage} material={mats.foliage} items={data.trees} pose={pose} radius={radius} />
+      <Instances geometry={geo.trunk} material={mats.trunk} items={trunkItems} pose={pose} radius={radius} />
+      <Instances geometry={geo.bush} material={mats.bush} items={data.bushes} pose={pose} radius={radius} />
+      <Instances geometry={geo.rock} material={mats.rock} items={data.rocks} pose={pose} radius={radius} />
+      <Instances geometry={geo.stone} material={mats.stone} items={data.pebbles} cast={false} pose={pose} radius={radius} />
       {/* Perimeter crash barriers around the Monza driving park */}
       <TrackBarriers />
       {/* Light-bulbed glowing marquee arrow signs pointing towards jump hills */}

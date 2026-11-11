@@ -29,6 +29,9 @@ import { TROPHY_POS } from "@/components/landmarkConfig";
 type View = "track" | "smoke" | "html";
 type CarModel = "r17" | "sf90";
 
+/** Trees, bushes, rocks and stones farther than this from the car are not drawn (free cam draws everything). */
+const SCENERY_RADIUS = 100;
+
 /* ---------- Loading Overlay ---------- */
 
 function SceneLoader({ onReady }: { onReady: () => void }) {
@@ -556,7 +559,7 @@ export default function CarLab() {
                 shadow-normalBias={0.03}
               />
               <RacingTrack showCurbs={showCurbs} night={night} withTerrain={true} pose={pose} />
-              <Terrain pose={pose} />
+              <Terrain pose={pose} radius={freeCam ? Infinity : SCENERY_RADIUS} />
               <ChessKnight night={night} />
               <NeuralNetworkHologram night={night} />
               <AchievementTrophy

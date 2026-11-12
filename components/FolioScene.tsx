@@ -56,7 +56,7 @@ function LoadingScreen({ progress, visible }: { progress: number; visible: boole
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "#0a1238",
+        background: "#000000",
         transition: "opacity 0.5s ease-out",
         opacity: visible ? 1 : 0,
         pointerEvents: visible ? "auto" : "none",
@@ -74,7 +74,7 @@ function LoadingScreen({ progress, visible }: { progress: number; visible: boole
         <circle
           cx={70} cy={70} r={r}
           fill="none"
-          stroke="#111111"
+          stroke="#ffffff"
           strokeWidth={stroke}
           strokeLinecap="round"
           strokeDasharray={`${dash} ${circ}`}

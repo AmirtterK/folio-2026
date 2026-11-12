@@ -533,6 +533,7 @@ function buildTerrain(): TerrainData {
   solids.push({ x: 0, z: 0, r: 1.0 });
   solids.push({ x: 3, z: 0, r: 1.0 });
   solids.push({ x: -3, z: 0, r: 1.0 });
+  solids.push({ x: 0, z: 4, r: 1.0 });
 
   /* holographic chess knight landmark */
   solids.push({ x: KNIGHT_POS.x, z: KNIGHT_POS.z, r: 0.9 });

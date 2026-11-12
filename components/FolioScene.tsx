@@ -685,6 +685,7 @@ export default function FolioScene() {
               <LogoObstacle position={[0, 0.8, 0]} color="#D97757" label="Claude" />
               <LogoObstacle position={[3, 0.8, 0]} color="#7A9DFF" label="Codex" />
               <LogoObstacle position={[-3, 0.8, 0]} color="#ffffff" label="ChatGPT" />
+              <LogoObstacle position={[0, 0.8, 4]} color="#EEEEEE" label="Lobe" />
               <FolioCar
                 key={`car-${carResetKey}-${carModel}`}
                 color={color}

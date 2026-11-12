@@ -258,6 +258,8 @@ export default function FolioScene() {
 
   /* ---- Landmark inspection state: trophy, chess knight and neural network share the same flow ---- */
   const [inspecting, setInspecting] = useState<LandmarkId | null>(null);
+  const [lastInspected, setLastInspected] = useState<LandmarkId | null>(null);
+  useEffect(() => { if (inspecting) setLastInspected(inspecting); }, [inspecting]);
   const [nearLandmark, setNearLandmark] = useState<LandmarkId | null>(null);
   const nearLandmarkRef = useRef<LandmarkId | null>(null);
   const inspectingRef = useRef<LandmarkId | null>(null);
@@ -630,8 +632,8 @@ export default function FolioScene() {
                 zoomMultiplier={zoomMultiplier}
                 mobile={isTouch}
                 inspecting={!!inspecting}
-                inspectTarget={inspecting ? inspectViews[inspecting].target : undefined}
-                inspectCamPos={inspecting ? inspectViews[inspecting].cam : undefined}
+                inspectTarget={inspecting ? inspectViews[inspecting].target : (lastInspected ? inspectViews[lastInspected].target : undefined)}
+                inspectCamPos={inspecting ? inspectViews[inspecting].cam : (lastInspected ? inspectViews[lastInspected].cam : undefined)}
                 freeCam={freeCam}
               />
               {freeCam && <FreeCamControls pose={pose} input={camKeys} />}

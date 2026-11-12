@@ -67,14 +67,18 @@ export default function Minimap({ pose, visible, onToggle }: MinimapProps) {
         position: "fixed",
         inset: 0,
         zIndex: 100,
-        display: visible ? "flex" : "none",
+        display: "flex",
         alignItems: "center",
         justifyContent: "center",
         padding:
           "max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))",
-        backgroundColor: "#050812",
+        backgroundColor: "rgba(5, 8, 18, 0.35)",
+        backdropFilter: "blur(2px)",
         userSelect: "none",
         cursor: "pointer",
+        opacity: visible ? 1 : 0,
+        pointerEvents: visible ? "auto" : "none",
+        transition: "opacity 0.35s ease",
       }}
     >
       <div
@@ -87,8 +91,11 @@ export default function Minimap({ pose, visible, onToggle }: MinimapProps) {
           padding: "clamp(5px, 1.1vw, 13px)",
           border: "1px solid rgba(255, 255, 255, 0.55)",
           borderRadius: 10,
-          backgroundColor: "#090d1c",
+          backgroundColor: "rgba(9, 13, 28, 0.85)",
           boxShadow: "0 10px 40px rgba(0,0,0,0.6)",
+          transform: visible ? "scale(1) translateY(0)" : "scale(0.92) translateY(12px)",
+          opacity: visible ? 1 : 0,
+          transition: "transform 0.4s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.35s ease",
         }}
       >
         <svg

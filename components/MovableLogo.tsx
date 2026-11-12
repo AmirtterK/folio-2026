@@ -37,7 +37,8 @@ export default function MovableLogo({ position, children }: MovableLogoProps) {
       }
       unregisterLogo(idRef.current);
     };
-  }, [world, position, registerLogo, unregisterLogo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [world]);
 
   useFrame(() => {
     const body = bodyRef.current;

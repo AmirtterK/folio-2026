@@ -268,6 +268,7 @@ export default function FolioScene() {
   nearLandmarkRef.current = nearLandmark;
   inspectingRef.current = inspecting;
 
+  const obstacleVelocities = useRef<Record<string, THREE.Vector3>>({});
   const emptyInput = useRef<CarInput>({ fwd: 0, back: 0, left: 0, right: 0, brake: 1 });
   // Free-cam movement keys (WASD) -- kept separate from the car's input so arrows can still drive
   const camKeys = useRef<CarInput>({ fwd: 0, back: 0, left: 0, right: 0, brake: 0 });
@@ -682,10 +683,10 @@ export default function FolioScene() {
               />
               <MobileTapHandler pose={pose} />
               <CarLoadingHologram pose={pose} visible={!carLoaded} night={night} />
-              <LogoObstacle position={[0, 0.8, 0]} color="#D97757" label="Claude" />
-              <LogoObstacle position={[3, 0.8, 0]} color="#7A9DFF" label="Codex" />
-              <LogoObstacle position={[-3, 0.8, 0]} color="#ffffff" label="ChatGPT" />
-              <LogoObstacle position={[0, 0.8, 4]} color="#EEEEEE" label="Lobe" />
+              <LogoObstacle position={[0, 0.8, 0]} color="#D97757" pose={pose} id="claude" velocities={obstacleVelocities} />
+              <LogoObstacle position={[3, 0.8, 0]} color="#7A9DFF" pose={pose} id="codex" velocities={obstacleVelocities} />
+              <LogoObstacle position={[-3, 0.8, 0]} color="#ffffff" pose={pose} id="chatgpt" velocities={obstacleVelocities} />
+              <LogoObstacle position={[0, 0.8, 4]} color="#EEEEEE" pose={pose} id="lobe" velocities={obstacleVelocities} />
               <FolioCar
                 key={`car-${carResetKey}-${carModel}`}
                 color={color}

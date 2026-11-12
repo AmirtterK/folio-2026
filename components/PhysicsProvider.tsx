@@ -47,10 +47,6 @@ export function PhysicsProvider({
       const world = new RAPIER.World({ x: 0, y: 0, z: 0 });
       worldRef.current = world;
 
-      // ground plane
-      const groundDesc = RAPIER.ColliderDesc.cuboid(1000, 0.1, 1000);
-      world.createCollider(groundDesc, world.createRigidBody(RAPIER.RigidBodyDesc.fixed()));
-
       // car kinematic body
       const carBody = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased());
       world.createCollider(RAPIER.ColliderDesc.cuboid(1.2, 0.5, 2.0), carBody);

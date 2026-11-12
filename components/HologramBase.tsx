@@ -10,7 +10,7 @@ export const PLINTH_TOP = 0.75;
 /** Radius of the projector's foot at size 1. */
 export const PLINTH_RADIUS = 0.44;
 /** Standard footprint of every landmark projector, so all the holograms sit on the same base. */
-export const LANDMARK_BASE_SIZE = 2.1;
+export const LANDMARK_BASE_SIZE = 2.52;
 
 /** World height of the projector dish for a given base size (children are placed here). */
 export const hologramBaseTop = (size = LANDMARK_BASE_SIZE) => PLINTH_TOP * (1 + (size - 1) * 0.4);

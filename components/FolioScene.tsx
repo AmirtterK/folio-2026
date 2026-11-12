@@ -739,7 +739,7 @@ export default function FolioScene() {
                 bounds={TERRAIN_BOUNDS}
                 start={TRACK_START}
                 maxSpeed={18}
-                carScale={0.75075}
+                carScale={0.9009}
                 model={carModel}
                 headlights={night}
                 onReady={handleSceneReady}
@@ -760,7 +760,7 @@ export default function FolioScene() {
               <ambientLight intensity={0.8} />
               <hemisphereLight args={["#ffffff", "#555555", 0.5]} />
               <directionalLight position={[4, 7, 5]} intensity={1.2} />
-              <FolioCar key={carModel} color={color} keyboard={false} input={carLoaded ? input : emptyInput} onSpeed={onSpeed} smoke={smokeOn && carLoaded} carScale={1.155} model={carModel} onReady={handleSceneReady} />
+              <FolioCar key={carModel} color={color} keyboard={false} input={carLoaded ? input : emptyInput} onSpeed={onSpeed} smoke={smokeOn && carLoaded} carScale={1.386} model={carModel} onReady={handleSceneReady} />
               <OrbitControls target={[0, 1, 0]} />
             </>
           )}

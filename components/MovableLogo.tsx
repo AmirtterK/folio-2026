@@ -46,6 +46,8 @@ export default function MovableLogo({ position, children }: MovableLogoProps) {
     if (!body || !g) return;
     const t = body.translation();
     const r = body.rotation();
+    // slow falldown: apply downward impulse so pushed logos settle
+    body.applyImpulse({ x: 0, y: -0.5, z: 0 }, true);
     g.position.set(t.x, t.y, t.z);
     g.quaternion.set(r.x, r.y, r.z, r.w);
   });

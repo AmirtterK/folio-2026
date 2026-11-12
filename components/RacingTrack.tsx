@@ -783,7 +783,7 @@ export function FolioTopDownCam({
     }
 
     // High-angle top-down view aligned straight with the track axes (theta = 0)
-    const phi = Math.PI * 0.16; // ~28.8° tilt from overhead for rich 3D depth
+    const phi = Math.PI * 0.3; // ~54° tilt for a more 3D, less top-down view
     const r = s.currentRadius;
     const offsetX = 0;
     const offsetY = r * Math.cos(phi);

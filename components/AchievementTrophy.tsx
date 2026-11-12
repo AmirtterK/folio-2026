@@ -22,6 +22,8 @@ type AchievementTrophyProps = {
   onInspectToggle: (inspect: boolean) => void;
   /** Night mode uses additive (glowing) blending; in daylight it falls back to normal blending so it stays visible. */
   night?: boolean;
+  /** Touch devices get a tap gesture prompt instead of an Enter key. */
+  touch?: boolean;
 };
 
 const HALF_PI = Math.PI / 2;
@@ -365,6 +367,7 @@ export default function AchievementTrophy({
   onNearChange,
   onInspectToggle,
   night = true,
+  touch = false,
 }: AchievementTrophyProps) {
   const trophyCupRef = useRef<THREE.Group>(null);
   const gemRef = useRef<THREE.Mesh>(null);
@@ -436,13 +439,14 @@ export default function AchievementTrophy({
         {/* Achievement as free-floating holographic writing, revealed while inspecting */}
         <HoloText lines={HOLO_LINES} active={inspecting} night={night} />
 
-        {/* Floating prompt: a quiet orb that becomes an Enter key as the car pulls up, to the right of the cup */}
+        {/* Floating prompt: a quiet orb that becomes an Enter key (or a tap gesture on touch) as the car pulls up, to the right of the cup */}
         <HoloKeyPrompt
           active={isNear}
           visible={!inspecting}
           onActivate={() => onInspectToggle(true)}
           position={PROMPT_POS}
           night={night}
+          touch={touch}
         />
       </HologramBase>
     </group>

@@ -24,6 +24,8 @@ type HoloKeyPromptProps = {
   position?: [number, number, number];
   scale?: number;
   night?: boolean;
+  /** Touch devices show a tap gesture instead of an Enter key. */
+  touch?: boolean;
 };
 
 /** Classic Enter-key silhouette: a wide main bar with an extra box stepping out at the top-right. */
@@ -107,6 +109,87 @@ function createKeycapTexture(): THREE.CanvasTexture {
   return tex;
 }
 
+/** A holographic tap gesture: a pointing hand with ripple rings and a TAP label. */
+function createTapTexture(): THREE.CanvasTexture {
+  const size = 512;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, size, size);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.shadowColor = `rgba(${HOLO_RGB},0.9)`;
+  ctx.shadowBlur = 26;
+
+  // Ripple rings under the fingertip.
+  ctx.strokeStyle = HOLO_COLOR;
+  ctx.lineWidth = 10;
+  for (const r of [54, 84]) {
+    ctx.beginPath();
+    ctx.arc(256, 408, r, Math.PI * 0.15, Math.PI * 0.85);
+    ctx.stroke();
+  }
+
+  // Hand silhouette: palm plus an index finger pointing down at the tap point.
+  ctx.fillStyle = "rgba(94,200,255,0.16)";
+  ctx.strokeStyle = HOLO_COLOR;
+  ctx.lineWidth = 12;
+
+  ctx.beginPath();
+  ctx.moveTo(228, 250);
+  ctx.lineTo(228, 386);
+  ctx.quadraticCurveTo(228, 408, 250, 408);
+  ctx.lineTo(262, 408);
+  ctx.quadraticCurveTo(284, 408, 284, 386);
+  ctx.lineTo(284, 250);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(178, 140);
+  ctx.quadraticCurveTo(178, 110, 208, 110);
+  ctx.lineTo(304, 110);
+  ctx.quadraticCurveTo(334, 110, 334, 140);
+  ctx.lineTo(334, 238);
+  ctx.quadraticCurveTo(334, 268, 304, 268);
+  ctx.lineTo(208, 268);
+  ctx.quadraticCurveTo(178, 268, 178, 238);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(178, 178);
+  ctx.quadraticCurveTo(142, 178, 142, 212);
+  ctx.quadraticCurveTo(142, 240, 176, 240);
+  ctx.stroke();
+
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(210, 250);
+  ctx.lineTo(210, 214);
+  ctx.moveTo(256, 250);
+  ctx.lineTo(256, 214);
+  ctx.moveTo(302, 250);
+  ctx.lineTo(302, 214);
+  ctx.stroke();
+
+  // TAP label
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#eefdff";
+  ctx.font = "700 54px system-ui, -apple-system, 'Segoe UI', sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("TAP", 256, 62);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return tex;
+}
+
 function makeKeycapGeometry(): THREE.ExtrudeGeometry {
   const W = KEYCAP_W;
   const T = KEYCAP_TOTAL_H;
@@ -150,6 +233,7 @@ export default function HoloKeyPrompt({
   position = [0, 0, 0],
   scale = 1,
   night = true,
+  touch = false,
 }: HoloKeyPromptProps) {
   const groupRef = useRef<THREE.Group>(null);
   const orbRef = useRef<THREE.Group>(null);
@@ -160,10 +244,23 @@ export default function HoloKeyPrompt({
   hoveredRef.current = hovered;
 
   const assets = useMemo(() => {
+    const blending = night ? THREE.AdditiveBlending : THREE.NormalBlending;
+    if (touch) {
+      const tapTex = createTapTexture();
+      const tapMat = new THREE.MeshBasicMaterial({
+        map: tapTex,
+        transparent: true,
+        depthWrite: false,
+        toneMapped: false,
+        fog: false,
+        blending,
+        side: THREE.DoubleSide,
+      });
+      return { mode: "tap" as const, tapTex, tapMat };
+    }
     const keycapGeo = makeKeycapGeometry();
     const keycapTex = createKeycapTexture();
     const keycapEdges = new THREE.EdgesGeometry(keycapGeo, 15);
-    const blending = night ? THREE.AdditiveBlending : THREE.NormalBlending;
     const keycapBody = new THREE.MeshBasicMaterial({
       color: HOLO_COLOR,
       transparent: true,
@@ -189,11 +286,24 @@ export default function HoloKeyPrompt({
       fog: false,
       blending,
     });
-    return { keycapGeo, keycapTex, keycapEdges, keycapBody, keycapEdgeMat, keycapFace };
-  }, [night]);
+    return {
+      mode: "key" as const,
+      keycapGeo,
+      keycapTex,
+      keycapEdges,
+      keycapBody,
+      keycapEdgeMat,
+      keycapFace,
+    };
+  }, [night, touch]);
 
   useEffect(() => {
     return () => {
+      if (assets.mode === "tap") {
+        assets.tapTex.dispose();
+        assets.tapMat.dispose();
+        return;
+      }
       assets.keycapGeo.dispose();
       assets.keycapTex.dispose();
       assets.keycapEdges.dispose();
@@ -233,7 +343,9 @@ export default function HoloKeyPrompt({
       orbRef.current.rotation.x = t * 0.5;
     }
     if (keycapRef.current) {
-      const s = Math.max(0.001, ne * (hoveredRef.current ? 1.07 : 1));
+      const hoverScale = hoveredRef.current ? 1.07 : 1;
+      const tapPulse = touch ? 1 + Math.sin(t * 3.2) * 0.045 : 1;
+      const s = Math.max(0.001, ne * hoverScale * tapPulse);
       keycapRef.current.visible = s > 0.02;
       keycapRef.current.scale.setScalar(s);
       keycapRef.current.rotation.z = (1 - ne) * -0.6;
@@ -284,11 +396,19 @@ export default function HoloKeyPrompt({
           document.body.style.cursor = "";
         }}
       >
-        <mesh geometry={assets.keycapGeo} material={assets.keycapBody} />
-        <lineSegments geometry={assets.keycapEdges} material={assets.keycapEdgeMat} />
-        <mesh position={[0, 0, KEYCAP_D / 2 + 0.02]} material={assets.keycapFace}>
-          <planeGeometry args={[KEYCAP_W, KEYCAP_TOTAL_H]} />
-        </mesh>
+        {assets.mode === "tap" ? (
+          <mesh material={assets.tapMat} position={[0, 0, 0.02]}>
+            <planeGeometry args={[1.05, 1.05]} />
+          </mesh>
+        ) : (
+          <>
+            <mesh geometry={assets.keycapGeo} material={assets.keycapBody} />
+            <lineSegments geometry={assets.keycapEdges} material={assets.keycapEdgeMat} />
+            <mesh position={[0, 0, KEYCAP_D / 2 + 0.02]} material={assets.keycapFace}>
+              <planeGeometry args={[KEYCAP_W, KEYCAP_TOTAL_H]} />
+            </mesh>
+          </>
+        )}
       </group>
     </group>
   );

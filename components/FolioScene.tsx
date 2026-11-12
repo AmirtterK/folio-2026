@@ -241,8 +241,77 @@ export default function FolioScene() {
   });
   const [gestures, setGestures] = useState(false);
   const [freeCam, setFreeCam] = useState(false);
+  const [isTouch, setIsTouch] = useState(false);
   const freeCamRef = useRef(false);
   freeCamRef.current = freeCam;
+
+  /* ---- Touch device detection: phones/tablets get a tap prompt and forced landscape ---- */
+  useEffect(() => {
+    const coarse = window.matchMedia("(pointer: coarse)");
+    const update = () => setIsTouch(coarse.matches || navigator.maxTouchPoints > 0);
+    update();
+    coarse.addEventListener?.("change", update);
+    return () => coarse.removeEventListener?.("change", update);
+  }, []);
+
+  // Force phones into landscape. Orientation lock requires fullscreen on most browsers and a
+  // user gesture, so try right away (installed/standalone contexts) and again on the first tap.
+  useEffect(() => {
+    if (!isTouch) return;
+    let cancelled = false;
+
+    const lockLandscape = async () => {
+      const orientation = screen.orientation as ScreenOrientation & {
+        lock?: (o: string) => Promise<void>;
+      };
+      if (typeof orientation?.lock !== "function") return false;
+      try {
+        await orientation.lock("landscape");
+        return !cancelled;
+      } catch {
+        return false;
+      }
+    };
+
+    const enterFullscreen = async () => {
+      if (document.fullscreenElement) return;
+      const el = document.documentElement as HTMLElement & {
+        webkitRequestFullscreen?: () => Promise<void> | void;
+      };
+      try {
+        if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: "hide" });
+        else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+      } catch {
+        // Browsers that refuse fullscreen still get the CSS rotation fallback.
+      }
+    };
+
+    const tryLock = async () => {
+      if (cancelled) return;
+      if (await lockLandscape()) return;
+      await enterFullscreen();
+      if (!cancelled) await lockLandscape();
+    };
+
+    void tryLock();
+
+    const onFirstGesture = () => {
+      void tryLock();
+    };
+    window.addEventListener("pointerdown", onFirstGesture, { once: true });
+    window.addEventListener("touchend", onFirstGesture, { once: true });
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("pointerdown", onFirstGesture);
+      window.removeEventListener("touchend", onFirstGesture);
+      try {
+        screen.orientation?.unlock?.();
+      } catch {
+        // ignore
+      }
+    };
+  }, [isTouch]);
 
   /* ---- Landmark Achievement Inspection State ---- */
   const [inspectingTrophy, setInspectingTrophy] = useState(false);
@@ -511,6 +580,8 @@ export default function FolioScene() {
 
   return (
     <div
+      className="folio-app"
+      data-touch={isTouch ? "true" : "false"}
       style={{ position: "fixed", inset: 0, backgroundColor: night ? "#0a1238" : "#cbe2f2" }}
       onClick={() => {
         if (inspectingTrophyRef.current) setInspectingTrophy(false);
@@ -569,6 +640,7 @@ export default function FolioScene() {
                 inspecting={inspectingTrophy}
                 onNearChange={handleTrophyNearChange}
                 onInspectToggle={setInspectingTrophy}
+                touch={isTouch}
               />
               <FolioCar
                 key={`car-${carResetKey}-${carModel}`}
@@ -929,6 +1001,22 @@ export default function FolioScene() {
 
       {/* Global CSS keyframes and responsive layout for DOM overlays */}
       <style>{`
+        /* Phones held upright: rotate the whole app to landscape when the browser cannot
+           lock orientation (the native lock wins whenever it is available). */
+        @media (orientation: portrait) and (pointer: coarse) {
+          .folio-app {
+            inset: auto !important;
+            top: 50% !important;
+            left: 50% !important;
+            width: 100vh !important;
+            height: 100vw !important;
+            width: 100dvh !important;
+            height: 100dvw !important;
+            transform: translate(-50%, -50%) rotate(90deg) !important;
+            transform-origin: center center !important;
+          }
+        }
+
         @keyframes pillFloat {
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-4px); }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import type { MutableRefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import FolioCar from "@/components/FolioCar";
@@ -293,7 +294,63 @@ export default function FolioScene() {
     };
   }, []);
 
-  /* ---- Loading state ---- */
+  /* ---- Tap-to-inspect handler for mobile (bypasses R3F pointer events, which are unreliable on touch) ---- */
+  const MobileTapHandler = ({ pose }: { pose: MutableRefObject<CarPose> }) => {
+    const { camera, scene, gl } = useThree();
+    const raycaster = useRef(new THREE.Raycaster());
+    const startRef = useRef<{ x: number; y: number; t: number } | null>(null);
+
+    useEffect(() => {
+      const el = gl.domElement;
+      const onStart = (e: TouchEvent) => {
+        const t = e.touches[0];
+        if (!t) return;
+        startRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+      };
+      const onEnd = (e: TouchEvent) => {
+        const s = startRef.current;
+        startRef.current = null;
+        if (!s) return;
+        const t = e.changedTouches[0];
+        if (!t) return;
+        const dx = t.clientX - s.x;
+        const dy = t.clientY - s.y;
+        if (Math.hypot(dx, dy) > 12) return; // it was a drag/pan, not a tap
+        if (Date.now() - s.t > 400) return;
+
+        const rect = el.getBoundingClientRect();
+        const ndc = new THREE.Vector2(
+          ((t.clientX - rect.left) / rect.width) * 2 - 1,
+          -((t.clientY - rect.top) / rect.height) * 2 + 1
+        );
+        raycaster.current.setFromCamera(ndc, camera);
+        const hits = raycaster.current.intersectObjects(scene.children, true);
+        const hit = hits.find((h) => h.object.userData?.landmark);
+        if (!hit) return;
+        const id = hit.object.userData.landmark as LandmarkId;
+        // only trigger when the car is actually near that landmark and not already inspecting
+        const p = pose.current;
+        const landmarkPos =
+          id === "trophy"
+            ? { x: TROPHY_POS.x, z: TROPHY_POS.z }
+            : id === "knight"
+            ? { x: KNIGHT_POS.x, z: KNIGHT_POS.z }
+            : { x: NEURAL_POS.x, z: NEURAL_POS.z };
+        const dist = Math.hypot(p.x - landmarkPos.x, p.z - landmarkPos.z);
+        if (dist < 7.0 && !inspectingRef.current) {
+          setInspecting(id);
+        }
+      };
+      el.addEventListener("touchstart", onStart, { passive: true });
+      el.addEventListener("touchend", onEnd, { passive: true });
+      return () => {
+        el.removeEventListener("touchstart", onStart);
+        el.removeEventListener("touchend", onEnd);
+      };
+    }, [camera, scene, gl, pose]);
+
+    return null;
+  };
   const [sceneReady, setSceneReady] = useState(false);
   const [carReady, setCarReady] = useState(false);
   const [carLoaded, setCarLoaded] = useState(false);
@@ -607,6 +664,7 @@ export default function FolioScene() {
                 onInspectToggle={(on) => setInspecting(on ? "trophy" : null)}
                 touch={isTouch}
               />
+              <MobileTapHandler pose={pose} />
               <CarLoadingHologram pose={pose} visible={!carLoaded} night={night} />
               <FolioCar
                 key={`car-${carResetKey}-${carModel}`}
@@ -979,6 +1037,8 @@ export default function FolioScene() {
           scrollbar-width: none;
         }
         .folio-toolbar::-webkit-scrollbar { display: none; }
+
+        canvas { touch-action: manipulation; }
 
         @media (max-width: 760px), (pointer: coarse) and (max-height: 600px) {
           .folio-toolbar {

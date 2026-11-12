@@ -427,6 +427,7 @@ export default function AchievementTrophy({
       {/* Invisible tap hitbox so the whole landmark (not just the prompt) is tappable on mobile */}
       <mesh
         position={[0, 2, 0]}
+        userData={{ landmark: "trophy" }}
         onClick={(e) => { if (isNear && !inspecting) { e.stopPropagation(); onInspectToggle(true); } }}
       >
         <sphereGeometry args={[2.2, 12, 12]} />

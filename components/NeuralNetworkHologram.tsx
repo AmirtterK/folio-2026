@@ -305,6 +305,7 @@ export default function NeuralNetworkHologram({
       {/* Invisible tap hitbox so the whole landmark is tappable on mobile */}
       <mesh
         position={[0, 2, 0]}
+        userData={{ landmark: "neural" }}
         onClick={(e) => { if (isNear && !inspecting) { e.stopPropagation(); onInspectToggle(true); } }}
       >
         <sphereGeometry args={[2.4, 12, 12]} />

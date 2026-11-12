@@ -28,6 +28,7 @@ import NeuralNetworkHologram from "@/components/NeuralNetworkHologram";
 import CarLoadingHologram from "@/components/CarLoadingHologram";
 import LogoObstacle from "@/components/LogoObstacle";
 import MovableLogo from "@/components/MovableLogo";
+import { PhysicsProvider } from "@/components/PhysicsProvider";
 import { ClaudeCodeLogo } from "@/components/ClaudeCodeLogo";
 import { CodexLogo } from "@/components/CodexLogo";
 import { OpenAILogo } from "@/components/OpenAILogo";
@@ -629,8 +630,9 @@ export default function FolioScene() {
           }
         >
           {view === "track" ? (
-            <>
-              <color attach="background" args={[night ? "#0a1238" : "#cbe2f2"]} />
+            <PhysicsProvider pose={pose}>
+              <>
+                <color attach="background" args={[night ? "#0a1238" : "#cbe2f2"]} />
               <fog
                 attach="fog"
                 args={
@@ -688,16 +690,16 @@ export default function FolioScene() {
               />
               <MobileTapHandler pose={pose} />
               <CarLoadingHologram pose={pose} visible={!carLoaded} night={night} />
-              <MovableLogo position={[15, 0, 57]} pose={pose} id="claude" velocities={obstacleVelocities}>
+              <MovableLogo position={[15, 0, 57]}>
                 <ClaudeCodeLogo size={4} />
               </MovableLogo>
-              <MovableLogo position={[5, 0, 57]} pose={pose} id="codex" velocities={obstacleVelocities}>
+              <MovableLogo position={[5, 0, 57]}>
                 <CodexLogo size={4} />
               </MovableLogo>
-              <MovableLogo position={[-5, 0, 57]} pose={pose} id="chatgpt" velocities={obstacleVelocities}>
+              <MovableLogo position={[-5, 0, 57]}>
                 <OpenAILogo size={4} color="#ffffff" />
               </MovableLogo>
-              <MovableLogo position={[-15, 0, 57]} pose={pose} id="lobe" velocities={obstacleVelocities}>
+              <MovableLogo position={[-15, 0, 57]}>
                 <OpenCodeLogo size={0.5} />
               </MovableLogo>
               <FolioCar
@@ -729,7 +731,7 @@ export default function FolioScene() {
                 freeCam={freeCam}
               />
               {freeCam && <FreeCamControls pose={pose} input={camKeys} />}
-            </>
+            </></PhysicsProvider>
           ) : (
             <>
               <ambientLight intensity={0.8} />

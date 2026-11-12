@@ -1,59 +1,55 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
+import RAPIER from "@dimforge/rapier3d-compat";
 import type { MutableRefObject } from "react";
 import type { ReactNode } from "react";
 import type { CarPose } from "@/components/FolioCar";
 import { groundHeight } from "@/components/Terrain";
+import { usePhysics } from "@/components/PhysicsProvider";
 
 type MovableLogoProps = {
   position: [number, number, number];
-  pose: MutableRefObject<CarPose>;
-  id: string;
-  velocities: MutableRefObject<Record<string, THREE.Vector3>>;
   children: ReactNode;
 };
 
-export default function MovableLogo({ position, pose, id, velocities, children }: MovableLogoProps) {
+export default function MovableLogo({ position, children }: MovableLogoProps) {
   const ref = useRef<THREE.Group>(null);
-  const base = useRef(new THREE.Vector3(position[0], groundHeight(position[0], position[2]) + 2.5, position[2]));
+  const bodyRef = useRef<RAPIER.RigidBody | null>(null);
+  const { world, registerLogo, unregisterLogo } = usePhysics();
+  const idRef = useRef(Math.random().toString(36).slice(2));
 
-  useFrame((_, delta) => {
+  useEffect(() => {
+    if (!world) return;
+    const body = world.createRigidBody(
+      RAPIER.RigidBodyDesc.dynamic().setTranslation(position[0], groundHeight(position[0], position[2]) + 1.5, position[2])
+    );
+    world.createCollider(RAPIER.ColliderDesc.cuboid(1.5, 1.5, 0.5), body);
+    bodyRef.current = body;
+    registerLogo(idRef.current, body);
+    return () => {
+      if (bodyRef.current) {
+        world.removeRigidBody(bodyRef.current);
+        bodyRef.current = null;
+      }
+      unregisterLogo(idRef.current);
+    };
+  }, [world, position, registerLogo, unregisterLogo]);
+
+  useFrame(() => {
+    const body = bodyRef.current;
     const g = ref.current;
-    if (!g) return;
-    const dt = Math.min(delta, 0.05);
-    const v = velocities.current[id] || new THREE.Vector3();
-    velocities.current[id] = v;
-
-    const car = pose.current;
-    const dx = g.position.x - car.x;
-    const dz = g.position.z - car.z;
-    const dist = Math.hypot(dx, dz);
-    const radius = 5.0;
-    if (dist < radius && dist > 0.01) {
-      const push = (radius - dist) * 80 + Math.abs(car.speed) * 8;
-      v.x += (dx / dist) * push * dt;
-      v.z += (dz / dist) * push * dt;
-    }
-
-    g.position.x += v.x * dt;
-    g.position.z += v.z * dt;
-    v.x *= 0.7;
-    v.z *= 0.7;
-
-    const sx = base.current.x - g.position.x;
-    const sz = base.current.z - g.position.z;
-    g.position.x += sx * 0.002;
-    g.position.z += sz * 0.002;
-
-    g.position.y = groundHeight(g.position.x, g.position.z) + 2.5;
-    g.rotation.y += 0.3 * dt;
+    if (!body || !g) return;
+    const t = body.translation();
+    const r = body.rotation();
+    g.position.set(t.x, t.y, t.z);
+    g.quaternion.set(r.x, r.y, r.z, r.w);
   });
 
   return (
-    <group ref={ref} position={[position[0], groundHeight(position[0], position[2]) + 2.5, position[2]]} scale={1.0}>
+    <group ref={ref} position={[position[0], groundHeight(position[0], position[2]) + 1.5, position[2]]}>
       {children}
     </group>
   );

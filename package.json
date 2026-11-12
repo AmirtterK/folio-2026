@@ -9,6 +9,7 @@
     "postinstall": "node scripts/copy-mediapipe.mjs"
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.21.0",
     "@mediapipe/tasks-vision": "^1.2.2",
     "@react-three/drei": "^10.0.0",
     "@react-three/fiber": "^9.0.0",

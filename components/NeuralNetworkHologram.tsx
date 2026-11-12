@@ -334,7 +334,7 @@ export default function NeuralNetworkHologram({
         </group>
 
         {/* Neural Flows as free-floating holographic writing, revealed while inspecting */}
-        <HoloText lines={NEURAL_LINES} active={inspecting} night={night} />
+        <HoloText lines={NEURAL_LINES} active={inspecting} night={night} mobile={touch} />
 
         {/* Floating prompt: a quiet orb that becomes an Enter key (or a tap gesture on touch) as the car pulls up */}
         <HoloKeyPrompt

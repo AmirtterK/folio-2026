@@ -178,7 +178,7 @@ export default function ChessKnight({
         </group>
 
         {/* Chess Ritter as free-floating holographic writing, revealed while inspecting */}
-        <HoloText lines={KNIGHT_LINES} active={inspecting} night={night} />
+        <HoloText lines={KNIGHT_LINES} active={inspecting} night={night} mobile={touch} />
 
         {/* Floating prompt: a quiet orb that becomes an Enter key (or a tap gesture on touch) as the car pulls up */}
         <HoloKeyPrompt

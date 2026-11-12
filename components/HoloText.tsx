@@ -30,6 +30,8 @@ type HoloTextProps = {
   active: boolean;
   /** Additive blending for night; normal blending keeps the text readable in daylight. */
   night?: boolean;
+  /** Mobile portrait: stack the text above the hologram instead of beside it. */
+  mobile?: boolean;
 };
 
 function setSpacing(ctx: CanvasRenderingContext2D, px: number) {
@@ -93,12 +95,18 @@ function createHoloTextTexture(spec: HoloLineSpec) {
 }
 
 /** A column of free-floating holographic lines that billboard toward the camera and ease in when active. */
-export default function HoloText({ lines, active, night = true }: HoloTextProps) {
+export default function HoloText({ lines, active, night = true, mobile = false }: HoloTextProps) {
   const reveal = useRef(0);
   const refs = useRef<(THREE.Group | null)[]>([]);
 
+  // On mobile portrait, stack the writing above the hologram instead of beside it.
+  const adjustedLines = useMemo(() => {
+    if (!mobile) return lines;
+    return lines.map((l) => ({ ...l, x: 0, y: l.y + 2.6 }));
+  }, [lines, mobile]);
+
   const assets = useMemo(() => {
-    return lines.map((spec) => {
+    return adjustedLines.map((spec) => {
       const { tex, planeW, planeH } = createHoloTextTexture(spec);
       const mat = new THREE.MeshBasicMaterial({
         map: tex,
@@ -112,7 +120,7 @@ export default function HoloText({ lines, active, night = true }: HoloTextProps)
       const geo = new THREE.PlaneGeometry(planeW, planeH);
       return { spec, tex, mat, geo };
     });
-  }, [lines, night]);
+  }, [adjustedLines, night]);
 
   useEffect(() => {
     return () => {

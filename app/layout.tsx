@@ -3,6 +3,9 @@ import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
   title: "Folio 2026",
+  icons: {
+    icon: "/favicon.png",
+  },
 };
 
 export const viewport: Viewport = {

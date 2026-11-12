@@ -21,7 +21,7 @@ export default function Page() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#0a1238",
+          background: "#000000",
           pointerEvents: "none",
         }}
       >

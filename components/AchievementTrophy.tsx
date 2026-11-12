@@ -426,9 +426,10 @@ export default function AchievementTrophy({
     <group position={[TROPHY_POS.x, y, TROPHY_POS.z]}>
       {/* Invisible tap hitbox so the whole landmark (not just the prompt) is tappable on mobile */}
       <mesh
+        position={[0, 2, 0]}
         onClick={(e) => { if (isNear && !inspecting) { e.stopPropagation(); onInspectToggle(true); } }}
       >
-        <sphereGeometry args={[2.6, 12, 12]} />
+        <sphereGeometry args={[2.2, 12, 12]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
       {/* Shared round hologram projector: radar pings on the road, blue light and a faint beam, like the other landmarks */}

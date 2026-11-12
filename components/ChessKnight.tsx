@@ -151,6 +151,7 @@ export default function ChessKnight({
     <group position={[KNIGHT_POS.x, y, KNIGHT_POS.z]}>
       {/* Invisible tap hitbox so the whole landmark is tappable on mobile */}
       <mesh
+        position={[0, 2, 0]}
         onClick={(e) => { if (isNear && !inspecting) { e.stopPropagation(); onInspectToggle(true); } }}
       >
         <sphereGeometry args={[2.0, 12, 12]} />

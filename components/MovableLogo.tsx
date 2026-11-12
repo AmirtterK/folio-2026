@@ -48,8 +48,16 @@ export default function MovableLogo({ position, children }: MovableLogoProps) {
     const r = body.rotation();
     // slow falldown: apply downward impulse so pushed logos settle
     body.applyImpulse({ x: 0, y: -0.5, z: 0 }, true);
-    g.position.set(t.x, t.y, t.z);
-    g.quaternion.set(r.x, r.y, r.z, r.w);
+    // clamp to terrain surface so they don't fall through
+    const ground = groundHeight(t.x, t.z) + 2.0;
+    if (t.y < ground) {
+      body.setTranslation({ x: t.x, y: ground, z: t.z }, true);
+      body.setLinvel({ x: body.linvel().x, y: 0, z: body.linvel().z }, true);
+    }
+    const tt = body.translation();
+    const rr = body.rotation();
+    g.position.set(tt.x, tt.y, tt.z);
+    g.quaternion.set(rr.x, rr.y, rr.z, rr.w);
   });
 
   return (

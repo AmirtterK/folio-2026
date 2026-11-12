@@ -1,6 +1,6 @@
 # r3f-logos
 
-3D (extruded) React Three Fiber versions of 23 logos: 19 tech logos + 4 AI-tool logos.
+3D (extruded) React Three Fiber versions of 26 logos: 22 tech logos + 4 AI-tool logos.
 
 ## Install
 
@@ -29,6 +29,7 @@ All logos accept group props (`position`, `rotation`, `scale`...) plus:
 |----------------|---------|--------------------------------------------------|
 | `size`         | 2       | world size of the logo's largest side            |
 | `thickness`    | 1       | extrusion depth multiplier                       |
+| `holeColor`    | auto    | fill for cut-out letters/eyes/counters (auto = black on light logos, white on dark; `false` = see-through holes) |
 | `color`        | brand   | overrides the fill (tech logos default to brand colour, white if the brand is near-black) |
 | `bevel`        | 0.006   | bevel as a fraction of width, 0 = sharp edges    |
 | `metalness` / `roughness` | 0.15 / 0.4 | material                         |
@@ -36,7 +37,8 @@ All logos accept group props (`position`, `rotation`, `scale`...) plus:
 ## Contents
 
 - `ExtrudedSvg.tsx` — shared helper (SVG -> SVGLoader -> ExtrudeGeometry)
-- `tech/` — JavaScript, TypeScript, Tailwind, NextJs, ThreeJs, Express, Vite, Git, Php, MySql, Shadcn, Flutter, Dart, Firebase, Sqlite, Arduino, C, Python, Java
+- `svgShapes.ts` — fill-rule based shape builder (keeps hollow/filled parts correct across Three versions)
+- `tech/` — JavaScript, TypeScript, Tailwind, NextJs, ThreeJs, Express, Vite, Git, Php, MySql, Shadcn, Flutter, Dart, Firebase, Sqlite, Arduino, C, Python, Java, PostgreSql, Bash, Supabase
 - `ai/` — ClaudeCode, Codex, OpenAI, OpenCode
 - `svg/` — the original tech SVGs (from Devicon, MIT)
 - `LogosScene.tsx` — demo canvas showing all of them

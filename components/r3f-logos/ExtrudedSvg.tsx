@@ -4,6 +4,7 @@ import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { SVGLoader } from "three/examples/jsm/loaders/SVGLoader.js";
 import type { ThreeElements } from "@react-three/fiber";
+import { shapesFromPath } from "./svgShapes";
 
 export type GradientStop = [offset: number, color: string];
 
@@ -29,6 +30,17 @@ type Common = {
   bevel?: number;
   /** Replaces every fill (gradients are dropped) */
   color?: string;
+  /**
+   * Cut-outs (letters, eyes, counters) are filled with a contrasting solid so
+   * the logo never looks hollow. Omit for an automatic light/dark contrast
+   * colour (an SVG path can override it with a `data-hole="#hex"` attribute; `data-depth` / `data-z` per path set its own extrusion and offset), pass a colour to choose it, or `false` to keep the see-through holes.
+   */
+  holeColor?: string | false;
+  /**
+   * Non-reflective finish (Lambert): the logo shows its own colour whatever the
+   * environment map / lights reflect. Ignores metalness and roughness.
+   */
+  matte?: boolean;
   metalness?: number;
   roughness?: number;
   curveSegments?: number;
@@ -53,7 +65,15 @@ type Item = {
   depth: number;
   z: number;
   gradient?: SvgLayer["gradient"];
+  /** true for the hole-filling pieces, which keep their own colour */
+  inlay?: boolean;
 };
+
+/** Light bodies get a near-black inlay, dark/saturated bodies get white. */
+function contrastOf(hex: string) {
+  const { l } = new THREE.Color(hex).getHSL({ h: 0, s: 0, l: 0 }, THREE.SRGBColorSpace);
+  return l > 0.55 ? "#111111" : "#ffffff";
+}
 
 function lerpStops(stops: GradientStop[], t: number) {
   const c = new THREE.Color();
@@ -77,6 +97,8 @@ export function ExtrudedSvg({
   thickness = 1,
   bevel = 0.006,
   color,
+  holeColor,
+  matte = false,
   metalness = 0.15,
   roughness = 0.4,
   curveSegments = 16,
@@ -90,14 +112,44 @@ export function ExtrudedSvg({
 
     if (svg) {
       loader.parse(svg).paths.forEach((p, i) => {
-        const fillStyle = p.userData?.style?.fill;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const fillStyle = (p.userData as any)?.style?.fill;
         if (fillStyle === "none") return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const ud = (p.userData ?? {}) as any;
+        const rule = (ud.node as Element | undefined)?.getAttribute?.("fill-rule") ?? ud.style?.fillRule ?? ud.style?.["fill-rule"];
+        const shapes = shapesFromPath(p, rule === "evenodd", curveSegments);
+        const fill = `#${p.color.getHexString()}`;
+        const node = ud.node as Element | undefined;
+        const pDepth = node?.getAttribute?.("data-depth");
+        const pZ = node?.getAttribute?.("data-z");
+        const d = pDepth ? parseFloat(pDepth) : depth;
+        const z0 = pZ ? parseFloat(pZ) : 0;
+        const nodeHole = node?.getAttribute?.("data-hole");
         items.push({
-          shapes: p.toShapes(true),
-          fill: `#${p.color.getHexString()}`,
-          depth,
-          z: i * 0.0004, // tiny offset so stacked paths never z-fight
+          shapes,
+          fill,
+          depth: d,
+          z: z0 + i * 0.0004, // tiny offset so stacked paths never z-fight
         });
+
+        // Fill the cut-outs with a solid inlay. It is thinner than the body and
+        // sits centred in it, so the body (and any island inside the hole, like
+        // the counters of the PHP "p") stays proud of it and nothing z-fights.
+        if (holeColor !== false) {
+          const inlay = shapes.flatMap((s) =>
+            s.holes.map((h) => new THREE.Shape(h.getPoints(curveSegments)))
+          );
+          if (inlay.length) {
+            items.push({
+              shapes: inlay,
+              fill: nodeHole ?? holeColor ?? contrastOf(color ?? fill),
+              depth: d * 0.7,
+              z: z0 + d * 0.15 + i * 0.0004 + 0.0002,
+              inlay: true,
+            });
+          }
+        }
       });
     }
     for (const l of layers ?? []) {
@@ -139,9 +191,9 @@ export function ExtrudedSvg({
       }
 
       geometry.translate(-vbW / 2, -vbH / 2, 0);
-      return { geometry, fill: it.fill, z: it.z * vbW * thickness, useGradient };
+      return { geometry, fill: it.fill, z: it.z * vbW * thickness, useGradient, inlay: !!it.inlay };
     });
-  }, [layers, svg, depth, vbW, vbH, thickness, bevel, curveSegments, color]);
+  }, [layers, svg, depth, vbW, vbH, thickness, bevel, curveSegments, color, holeColor]);
 
   useEffect(() => () => built.forEach((b) => b.geometry.dispose()), [built]);
 
@@ -151,14 +203,23 @@ export function ExtrudedSvg({
     <group {...groupProps}>
       {/* SVG is y-down; the negative Y scale flips it upright (Three flips face winding for us) */}
       <group scale={[s, -s, s]}>
-        {built.map(({ geometry, fill, z, useGradient }, i) => (
+        {built.map(({ geometry, fill, z, useGradient, inlay }, i) => (
           <mesh key={i} geometry={geometry} position={[0, 0, z]} castShadow receiveShadow>
-            <meshStandardMaterial
-              color={useGradient ? "#ffffff" : color ?? fill}
-              vertexColors={useGradient}
-              metalness={metalness}
-              roughness={roughness}
-            />
+            {matte ? (
+              <meshLambertMaterial
+                color={useGradient ? "#ffffff" : inlay ? fill : color ?? fill}
+                emissive={useGradient ? "#000000" : inlay ? fill : color ?? fill}
+                emissiveIntensity={0.18}
+                vertexColors={useGradient}
+              />
+            ) : (
+              <meshStandardMaterial
+                color={useGradient ? "#ffffff" : inlay ? fill : color ?? fill}
+                vertexColors={useGradient}
+                metalness={metalness}
+                roughness={roughness}
+              />
+            )}
           </mesh>
         ))}
       </group>

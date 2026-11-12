@@ -17,3 +17,6 @@ export { ArduinoLogo } from "./ArduinoLogo";
 export { CLogo } from "./CLogo";
 export { PythonLogo } from "./PythonLogo";
 export { JavaLogo } from "./JavaLogo";
+export { PostgreSqlLogo } from "./PostgreSqlLogo";
+export { BashLogo } from "./BashLogo";
+export { SupabaseLogo } from "./SupabaseLogo";

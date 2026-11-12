@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, Suspense } from "react";
 import type { MutableRefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
+import { OrbitControls, Environment } from "@react-three/drei";
 import FolioCar from "@/components/FolioCar";
 import type { CarInput } from "@/components/FolioCarBase";
 import type { CarModel, CarPose } from "@/components/FolioCar";
@@ -110,12 +110,15 @@ function LoadingScreen({ progress, visible }: { progress: number; visible: boole
 function FreeCamControls({
   pose,
   input,
+  controlsRef: externalRef,
 }: {
   pose: React.MutableRefObject<CarPose>;
   input: React.MutableRefObject<CarInput>;
+  controlsRef?: React.MutableRefObject<any>;
 }) {
   const camera = useThree((s) => s.camera);
-  const controlsRef = useRef<any>(null);
+  const internalRef = useRef<any>(null);
+  const controlsRef = externalRef ?? internalRef;
   const tmp = useMemo(
     () => ({ fwd: new THREE.Vector3(), right: new THREE.Vector3(), move: new THREE.Vector3() }),
     []
@@ -135,28 +138,35 @@ function FreeCamControls({
     const i = input.current;
     const f = (i.fwd ? 1 : 0) - (i.back ? 1 : 0);
     const r = (i.right ? 1 : 0) - (i.left ? 1 : 0);
-    if (!f && !r) return;
 
-    const dt = Math.min(delta, 0.05);
-    // forward = camera look direction flattened onto the ground
-    camera.getWorldDirection(tmp.fwd);
-    tmp.fwd.y = 0;
-    if (tmp.fwd.lengthSq() < 1e-6) tmp.fwd.set(0, 0, -1);
-    tmp.fwd.normalize();
-    tmp.right.set(-tmp.fwd.z, 0, tmp.fwd.x);
+    if (f || r) {
+      const dt = Math.min(delta, 0.05);
+      // forward = camera look direction flattened onto the ground
+      camera.getWorldDirection(tmp.fwd);
+      tmp.fwd.y = 0;
+      if (tmp.fwd.lengthSq() < 1e-6) tmp.fwd.set(0, 0, -1);
+      tmp.fwd.normalize();
+      tmp.right.set(-tmp.fwd.z, 0, tmp.fwd.x);
 
-    // faster when zoomed out, slower when zoomed in close
-    const dist = camera.position.distanceTo(controls.target);
-    const speed = Math.max(6, dist * 0.9);
+      // faster when zoomed out, slower when zoomed in close
+      const dist = camera.position.distanceTo(controls.target);
+      const speed = Math.max(6, dist * 0.9);
 
-    tmp.move
-      .set(0, 0, 0)
-      .addScaledVector(tmp.fwd, f)
-      .addScaledVector(tmp.right, r)
-      .normalize()
-      .multiplyScalar(speed * dt);
-    camera.position.add(tmp.move);
-    controls.target.add(tmp.move);
+      tmp.move
+        .set(0, 0, 0)
+        .addScaledVector(tmp.fwd, f)
+        .addScaledVector(tmp.right, r)
+        .normalize()
+        .multiplyScalar(speed * dt);
+      camera.position.add(tmp.move);
+      controls.target.add(tmp.move);
+    }
+
+    // keep camera and target above terrain (including hills)
+    const camMinY = groundHeight(camera.position.x, camera.position.z) + 1.2;
+    if (camera.position.y < camMinY) camera.position.y = camMinY;
+    const targetMinY = groundHeight(controls.target.x, controls.target.z) + 0.4;
+    if (controls.target.y < targetMinY) controls.target.y = targetMinY;
   });
 
   return (
@@ -170,7 +180,8 @@ function FreeCamControls({
       rotateSpeed={0.8}
       minDistance={2}
       maxDistance={450}
-      maxPolarAngle={Math.PI * 0.49} // can't dip under the ground
+      minPolarAngle={0.01}
+      maxPolarAngle={Math.PI - 0.01}
       screenSpacePanning={false} // right-drag slides across the map instead of up/down
     />
   );
@@ -249,6 +260,7 @@ export default function FolioScene() {
     yaw: TRACK_START.yaw,
     speed: 0,
   });
+  const orbitControlsRef = useRef<any>(null);
   const [gestures, setGestures] = useState(false);
   const [freeCam, setFreeCam] = useState(false);
   const [isTouch, setIsTouch] = useState(false);
@@ -476,6 +488,17 @@ export default function FolioScene() {
         setFreeCam((v) => !v);
         return;
       }
+      // Hand gestures: G toggles and auto-activates free cam
+      if (e.code === "KeyG" && !e.repeat) {
+        e.preventDefault();
+        setInspecting(null);
+        setGestures((v) => {
+          const next = !v;
+          if (next) setFreeCam(true);
+          return next;
+        });
+        return;
+      }
       if (e.code === "Escape" && freeCamRef.current) {
         setFreeCam(false);
         e.preventDefault();
@@ -645,16 +668,18 @@ export default function FolioScene() {
                       : ["#cbe2f2", 80, 420]
                 }
               />
-              <ambientLight intensity={night ? 0.55 : 0.7} color={night ? "#5a68ff" : "#ffffff"} />
-              <hemisphereLight args={night ? ["#4a5cff", "#3a1a7a", 0.7] : ["#dbe9f6", "#739855", 0.55]} />
+              {/* Night environment reflections disabled to avoid load hangs */}
+              <ambientLight intensity={night ? 0.45 : 0.7} color={night ? "#6a78d8" : "#ffffff"} />
+              <hemisphereLight args={night ? ["#6f86d6", "#14182b", 0.45] : ["#dbe9f6", "#739855", 0.55]} />
+              {/* Sun / Moon key light */}
               <directionalLight
-                position={night ? [-40, 75, -30] : [40, 75, 30]}
-                intensity={night ? 1.5 : 1.35}
-                color={night ? "#7b88ff" : "#ffffff"}
+                position={night ? [40, 90, -30] : [40, 75, 30]}
+                intensity={night ? 0.85 : 1.35}
+                color={night ? "#c9d8ff" : "#ffffff"}
                 castShadow
                 shadow-mapSize={[1024, 1024]}
                 shadow-camera-near={10}
-                shadow-camera-far={200}
+                shadow-camera-far={220}
                 shadow-camera-left={-75}
                 shadow-camera-right={75}
                 shadow-camera-top={75}
@@ -714,11 +739,17 @@ export default function FolioScene() {
                 R3FLogos.CLogo,
                 R3FLogos.PythonLogo,
                 R3FLogos.JavaLogo,
+                R3FLogos.BashLogo,
+                R3FLogos.PostgreSqlLogo,
+                R3FLogos.SupabaseLogo,
               ].map((Logo, i) => {
                 const col = i % 8;
                 const row = Math.floor(i / 8);
-                const x = 28 - col * 8;
-                const z = 57 + (row - 1) * 6;
+                let x = 28 - col * 6.2;
+                let z = 57 + (row - 1) * 5.2;
+                // Bring Supabase and PostgreSQL logos closer together
+                if (i === 24) { x = 18; z = 57 + (3 - 1) * 5.2; } // PostgreSQL
+                if (i === 25) { x = 13.5; z = 57 + (3 - 1) * 5.2; } // Supabase
                 return (
                   <MovableLogo key={i} position={[x, 0, z]}>
                     <Logo size={3} />
@@ -753,7 +784,7 @@ export default function FolioScene() {
                 inspectCamPos={inspecting ? inspectViews[inspecting].cam : (lastInspected ? inspectViews[lastInspected].cam : undefined)}
                 freeCam={freeCam}
               />
-              {freeCam && <FreeCamControls pose={pose} input={camKeys} />}
+              {freeCam && <FreeCamControls pose={pose} input={camKeys} controlsRef={orbitControlsRef} />}
             </></PhysicsProvider>
           ) : (
             <>
@@ -989,26 +1020,34 @@ export default function FolioScene() {
           </>
         )}
 
-        {is3d && (
-          <label
+        {is3d && view === "track" && (
+          <button
+            onClick={() => {
+              setInspecting(null);
+              setGestures((v) => {
+                const next = !v;
+                if (next) setFreeCam(true);
+                return next;
+              });
+            }}
+            title="Hand gestures: control camera in free cam (press G)."
             style={{
-              display: "flex",
-              gap: 6,
-              alignItems: "center",
-              marginLeft: 8,
-              color: "#2a2622",
-              fontSize: 13,
+              padding: "7px 12px",
+              borderRadius: 9,
+              borderWidth: 1.5,
+              borderStyle: "solid",
+              borderColor: gestures ? "#111111" : "#cfc8bd",
+              backgroundColor: gestures ? "#111111" : "#fffdf9",
+              color: gestures ? "#ffffff" : "#2a2622",
+              fontSize: 12.5,
               fontWeight: 600,
               cursor: "pointer",
+              marginLeft: 4,
+              boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
             }}
           >
-            <input
-              type="checkbox"
-              checked={gestures}
-              onChange={(e) => setGestures(e.target.checked)}
-            />
-            Hand gestures
-          </label>
+            {gestures ? "Gestures on [G]" : "Gestures [G]"}
+          </button>
         )}
       </div>
 
@@ -1060,8 +1099,8 @@ export default function FolioScene() {
         </>
       )}
 
-      {is3d && gestures && (
-        <HandGestures input={input} onPressed={(p) => setPressed((prev) => ({ ...prev, ...p }))} />
+      {is3d && gestures && freeCam && (
+        <HandGestures controlsRef={orbitControlsRef} enabled={true} />
       )}
 
       {/* Real-time Track Radar Minimap */}

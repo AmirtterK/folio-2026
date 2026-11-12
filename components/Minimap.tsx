@@ -31,6 +31,7 @@ export default function Minimap({ pose, visible, onToggle }: MinimapProps) {
 
   // 60fps silky smooth direct DOM transform update without React re-render
   useEffect(() => {
+    if (!visible) return;
     let animId: number;
 
     const tick = () => {
@@ -53,21 +54,20 @@ export default function Minimap({ pose, visible, onToggle }: MinimapProps) {
 
     animId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animId);
-  }, [pose]);
-
-  if (!visible) return null;
+  }, [pose, visible]);
 
   return (
     <div
       role="dialog"
-      aria-modal="true"
+      aria-modal={visible ? "true" : undefined}
+      aria-hidden={!visible}
       aria-label="Track map. Tap anywhere to close."
       onClick={onToggle}
       style={{
         position: "fixed",
         inset: 0,
         zIndex: 100,
-        display: "flex",
+        display: visible ? "flex" : "none",
         alignItems: "center",
         justifyContent: "center",
         padding:
@@ -79,16 +79,16 @@ export default function Minimap({ pose, visible, onToggle }: MinimapProps) {
     >
       <div
         style={{
-          width: "min(94vw, 1100px)",
-          maxHeight: "88vh",
+          width: "min(75vw, 880px)",
+          maxHeight: "70vh",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          padding: "clamp(6px, 1.4vw, 16px)",
+          padding: "clamp(5px, 1.1vw, 13px)",
           border: "1px solid rgba(255, 255, 255, 0.55)",
           borderRadius: 10,
           backgroundColor: "#090d1c",
-          boxShadow: "0 0 0 1px rgba(0,0,0,0.6), 0 30px 90px rgba(0,0,0,0.7)",
+          boxShadow: "0 10px 40px rgba(0,0,0,0.6)",
         }}
       >
         <svg
@@ -96,16 +96,13 @@ export default function Minimap({ pose, visible, onToggle }: MinimapProps) {
           style={{
             width: "100%",
             height: "auto",
-            maxHeight: "84vh",
+            maxHeight: "67vh",
             display: "block",
             overflow: "visible",
           }}
         >
           <defs>
-            {/* Google Maps navigation glow and gradient filters */}
-            <filter id="navGlow" x="-50%" y="-50%" width="200%" height="200%">
-              <feDropShadow dx="0" dy="1" stdDeviation="3.5" floodColor="#1a73e8" floodOpacity="0.8" />
-            </filter>
+            {/* Google Maps navigation beam gradient */}
             <linearGradient id="navBeamGrad" x1="0%" y1="100%" x2="0%" y2="0%">
               <stop offset="0%" stopColor="#4285F4" stopOpacity="0.5" />
               <stop offset="60%" stopColor="#4285F4" stopOpacity="0.2" />
@@ -198,7 +195,7 @@ export default function Minimap({ pose, visible, onToggle }: MinimapProps) {
           </g>
 
           {/* Real-time Player Navigation Pointer (Google Maps style) */}
-          <g ref={markerRef} filter="url(#navGlow)">
+          <g ref={markerRef}>
             {/* Soft heading vision cone / beam like Google Maps navigation */}
             <path d="M 0 0 L -18 -36 A 40 40 0 0 1 18 -36 Z" fill="url(#navBeamGrad)" />
 

@@ -32,7 +32,7 @@ import { PhysicsProvider } from "@/components/PhysicsProvider";
 import { ClaudeCodeLogo } from "@/components/ClaudeCodeLogo";
 import { CodexLogo } from "@/components/CodexLogo";
 import { OpenAILogo } from "@/components/OpenAILogo";
-import { OpenCodeLogo } from "@/components/OpenCodeLogo";
+import * as R3FLogos from "@/components/r3f-logos";
 import { TROPHY_POS, KNIGHT_POS, NEURAL_POS } from "@/components/landmarkConfig";
 
 type View = "track" | "smoke" | "html";
@@ -690,18 +690,41 @@ export default function FolioScene() {
               />
               <MobileTapHandler pose={pose} />
               <CarLoadingHologram pose={pose} visible={!carLoaded} night={night} />
-              <MovableLogo position={[15, 0, 57]}>
-                <ClaudeCodeLogo size={4} />
-              </MovableLogo>
-              <MovableLogo position={[5, 0, 57]}>
-                <CodexLogo size={4} />
-              </MovableLogo>
-              <MovableLogo position={[-5, 0, 57]}>
-                <OpenAILogo size={4} color="#ffffff" />
-              </MovableLogo>
-              <MovableLogo position={[-15, 0, 57]}>
-                <OpenCodeLogo size={0.5} />
-              </MovableLogo>
+              {[
+                R3FLogos.ClaudeCodeLogo,
+                R3FLogos.CodexLogo,
+                R3FLogos.OpenAILogo,
+                R3FLogos.OpenCodeLogo,
+                R3FLogos.JavaScriptLogo,
+                R3FLogos.TypeScriptLogo,
+                R3FLogos.TailwindLogo,
+                R3FLogos.NextJsLogo,
+                R3FLogos.ThreeJsLogo,
+                R3FLogos.ExpressLogo,
+                R3FLogos.ViteLogo,
+                R3FLogos.GitLogo,
+                R3FLogos.PhpLogo,
+                R3FLogos.MySqlLogo,
+                R3FLogos.ShadcnLogo,
+                R3FLogos.FlutterLogo,
+                R3FLogos.DartLogo,
+                R3FLogos.FirebaseLogo,
+                R3FLogos.SqliteLogo,
+                R3FLogos.ArduinoLogo,
+                R3FLogos.CLogo,
+                R3FLogos.PythonLogo,
+                R3FLogos.JavaLogo,
+              ].map((Logo, i) => {
+                const col = i % 8;
+                const row = Math.floor(i / 8);
+                const x = 28 - col * 8;
+                const z = 57 + (row - 1) * 6;
+                return (
+                  <MovableLogo key={i} position={[x, 0, z]}>
+                    <Logo size={3} />
+                  </MovableLogo>
+                );
+              })}
               <FolioCar
                 key={`car-${carResetKey}-${carModel}`}
                 color={color}

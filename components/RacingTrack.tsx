@@ -759,7 +759,7 @@ export function FolioTopDownCam({
     // Dynamic zoom based on driving speed. On phones the scene is physically small, so pull the
     // camera back 22–30% to keep the car and track from feeling oversized.
     const viewAspect = size.width / Math.max(1, size.height);
-    const mobileZoom = mobile ? (viewAspect < 1 ? 1.6 : 1.45) : 1;
+    const mobileZoom = mobile ? (viewAspect < 1 ? 1.8 : 1.6) : 1;
     const baseRadius = 28 * zoomMultiplier * mobileZoom;
     const speedZoom = Math.min(14, Math.abs(p.speed) * 0.45);
     const targetRadius = baseRadius + speedZoom;
@@ -810,7 +810,7 @@ export function FolioTopDownCam({
     if (s.inspectAlpha > 0.001 && inspectCamPos && inspectTarget) {
       // On narrow screens the holographic text column is wider than the viewport, so back the
       // inspection camera off along the same sight line until the whole landmark + text fits.
-      const pull = viewAspect < 1 ? Math.min(2.2, 1 / viewAspect) : 1;
+      const pull = mobile && viewAspect < 1 ? Math.min(3.0, 1.6 / viewAspect) : (viewAspect < 1 ? Math.min(2.2, 1 / viewAspect) : 1);
       s.tmpPos.copy(inspectCamPos).sub(inspectTarget).multiplyScalar(pull).add(inspectTarget);
       // Smoothly blend position between driving overhead and inspection angle
       camera.position.lerpVectors(driveCamPos, s.tmpPos, s.inspectAlpha);

@@ -282,9 +282,10 @@ export default function FolioScene() {
   const inspectViews = useMemo(() => {
     const make = (x: number, z: number) => {
       const y = groundHeight(x, z);
+      const back = isTouch ? 14.0 : 10.0;
       return {
         target: new THREE.Vector3(x + 0.9, y + 2.3, z),
-        cam: new THREE.Vector3(x + 0.9, y + 2.4, z + 10.0),
+        cam: new THREE.Vector3(x + 0.9, y + 2.4, z + back),
       };
     };
     return {
@@ -292,7 +293,7 @@ export default function FolioScene() {
       knight: make(KNIGHT_POS.x, KNIGHT_POS.z),
       neural: make(NEURAL_POS.x, NEURAL_POS.z),
     };
-  }, []);
+  }, [isTouch]);
 
   /* ---- Tap-to-inspect handler for mobile (bypasses R3F pointer events, which are unreliable on touch) ---- */
   const MobileTapHandler = ({ pose }: { pose: MutableRefObject<CarPose> }) => {
@@ -327,20 +328,32 @@ export default function FolioScene() {
         );
         raycaster.current.setFromCamera(ndc, camera);
         const hits = raycaster.current.intersectObjects(scene.children, true);
-        const hit = hits.find((h) => h.object.userData?.landmark);
-        if (!hit) return;
-        const id = hit.object.userData.landmark as LandmarkId;
-        // only trigger when the car is actually near that landmark and not already inspecting
-        const p = pose.current;
-        const landmarkPos =
-          id === "trophy"
-            ? { x: TROPHY_POS.x, z: TROPHY_POS.z }
-            : id === "knight"
-            ? { x: KNIGHT_POS.x, z: KNIGHT_POS.z }
-            : { x: NEURAL_POS.x, z: NEURAL_POS.z };
-        const dist = Math.hypot(p.x - landmarkPos.x, p.z - landmarkPos.z);
-        if (dist < 7.0 && !inspectingRef.current) {
-          setInspecting(id);
+        const hit = hits.find((h) => h.object.userData?.landmark || h.object.userData?.link);
+
+        if (hit && hit.object.userData?.link) {
+          // tapping a link: let the click open it, don't exit
+          return;
+        }
+
+        if (inspectingRef.current) {
+          // any tap that isn't a link exits the inspection view
+          setInspecting(null);
+          return;
+        }
+
+        if (hit && hit.object.userData?.landmark) {
+          const id = hit.object.userData.landmark as LandmarkId;
+          const p = pose.current;
+          const landmarkPos =
+            id === "trophy"
+              ? { x: TROPHY_POS.x, z: TROPHY_POS.z }
+              : id === "knight"
+              ? { x: KNIGHT_POS.x, z: KNIGHT_POS.z }
+              : { x: NEURAL_POS.x, z: NEURAL_POS.z };
+          const dist = Math.hypot(p.x - landmarkPos.x, p.z - landmarkPos.z);
+          if (dist < 7.0) {
+            setInspecting(id);
+          }
         }
       };
       el.addEventListener("touchstart", onStart, { passive: false });

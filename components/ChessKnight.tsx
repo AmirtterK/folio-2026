@@ -155,7 +155,7 @@ export default function ChessKnight({
         userData={{ landmark: "knight" }}
         onClick={(e) => { if (isNear && !inspecting) { e.stopPropagation(); onInspectToggle(true); } }}
       >
-        <sphereGeometry args={[2.0, 12, 12]} />
+        <sphereGeometry args={[3.5, 12, 12]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
       <HologramBase night={night} size={LANDMARK_BASE_SIZE} lightY={1.45}>

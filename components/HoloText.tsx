@@ -186,7 +186,7 @@ export default function HoloText({ lines, active, night = true }: HoloTextProps)
               : undefined
           }
         >
-          <mesh geometry={line.geo} material={line.mat} renderOrder={2} />
+          <mesh geometry={line.geo} material={line.mat} renderOrder={2} userData={{ link: line.spec.link }} />
         </group>
       ))}
     </group>

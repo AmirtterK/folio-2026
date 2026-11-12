@@ -430,7 +430,7 @@ export default function AchievementTrophy({
         userData={{ landmark: "trophy" }}
         onClick={(e) => { if (isNear && !inspecting) { e.stopPropagation(); onInspectToggle(true); } }}
       >
-        <sphereGeometry args={[2.2, 12, 12]} />
+        <sphereGeometry args={[4.0, 12, 12]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
       {/* Shared round hologram projector: radar pings on the road, blue light and a faint beam, like the other landmarks */}

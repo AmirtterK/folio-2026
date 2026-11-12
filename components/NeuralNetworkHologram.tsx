@@ -308,7 +308,7 @@ export default function NeuralNetworkHologram({
         userData={{ landmark: "neural" }}
         onClick={(e) => { if (isNear && !inspecting) { e.stopPropagation(); onInspectToggle(true); } }}
       >
-        <sphereGeometry args={[2.4, 12, 12]} />
+        <sphereGeometry args={[4.0, 12, 12]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
       <HologramBase night={night} size={LANDMARK_BASE_SIZE} ringEnd={4.2} lightY={1.9}>

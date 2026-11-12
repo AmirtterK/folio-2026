@@ -305,9 +305,11 @@ export default function FolioScene() {
       const onStart = (e: TouchEvent) => {
         const t = e.touches[0];
         if (!t) return;
+        e.preventDefault();
         startRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
       };
       const onEnd = (e: TouchEvent) => {
+        e.preventDefault();
         const s = startRef.current;
         startRef.current = null;
         if (!s) return;
@@ -341,8 +343,8 @@ export default function FolioScene() {
           setInspecting(id);
         }
       };
-      el.addEventListener("touchstart", onStart, { passive: true });
-      el.addEventListener("touchend", onEnd, { passive: true });
+      el.addEventListener("touchstart", onStart, { passive: false });
+      el.addEventListener("touchend", onEnd, { passive: false });
       return () => {
         el.removeEventListener("touchstart", onStart);
         el.removeEventListener("touchend", onEnd);

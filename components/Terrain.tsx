@@ -531,10 +531,10 @@ function buildTerrain(): TerrainData {
   solids.push({ x: TROPHY_POS.x, z: TROPHY_POS.z, r: 0.75 });
   // Logo obstacles at track center
   // Logo obstacles on the main straight
-  solids.push({ x: 15, z: 57, r: 0.6 });
-  solids.push({ x: 5, z: 57, r: 0.6 });
-  solids.push({ x: -5, z: 57, r: 0.6 });
-  solids.push({ x: -15, z: 57, r: 0.6 });
+  solids.push({ x: 15, z: 57, r: 0.3 });
+  solids.push({ x: 5, z: 57, r: 0.3 });
+  solids.push({ x: -5, z: 57, r: 0.3 });
+  solids.push({ x: -15, z: 57, r: 0.3 });
 
   /* holographic chess knight landmark */
   solids.push({ x: KNIGHT_POS.x, z: KNIGHT_POS.z, r: 0.9 });

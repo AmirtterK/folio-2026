@@ -16,10 +16,9 @@ type MovableLogoProps = {
   children: ReactNode;
 };
 
-/** Wraps a logo in a movable group: pushed by the car, friction, springs back. */
 export default function MovableLogo({ position, pose, id, velocities, children }: MovableLogoProps) {
   const ref = useRef<THREE.Group>(null);
-  const base = useRef(new THREE.Vector3(position[0], groundHeight(position[0], position[2]) + 0.8, position[2]));
+  const base = useRef(new THREE.Vector3(position[0], groundHeight(position[0], position[2]) + 2.5, position[2]));
 
   useFrame((_, delta) => {
     const g = ref.current;
@@ -32,28 +31,29 @@ export default function MovableLogo({ position, pose, id, velocities, children }
     const dx = g.position.x - car.x;
     const dz = g.position.z - car.z;
     const dist = Math.hypot(dx, dz);
-    const radius = 2.5;
+    const radius = 4.0;
     if (dist < radius && dist > 0.01) {
-      const push = (radius - dist) * 30;
+      const push = (radius - dist) * 40 + Math.abs(car.speed) * 3;
       v.x += (dx / dist) * push * dt;
       v.z += (dz / dist) * push * dt;
     }
 
     g.position.x += v.x * dt;
     g.position.z += v.z * dt;
-    v.x *= 0.85;
-    v.z *= 0.85;
+    v.x *= 0.8;
+    v.z *= 0.8;
 
     const sx = base.current.x - g.position.x;
     const sz = base.current.z - g.position.z;
-    g.position.x += sx * 0.01;
-    g.position.z += sz * 0.01;
+    g.position.x += sx * 0.005;
+    g.position.z += sz * 0.005;
 
-    g.position.y = groundHeight(g.position.x, g.position.z) + 0.8;
+    g.position.y = groundHeight(g.position.x, g.position.z) + 2.5;
+    g.rotation.y += 0.3 * dt;
   });
 
   return (
-    <group ref={ref} position={[position[0], groundHeight(position[0], position[2]) + 0.8, position[2]]} scale={1.5}>
+    <group ref={ref} position={[position[0], groundHeight(position[0], position[2]) + 2.5, position[2]]} scale={1.0}>
       {children}
     </group>
   );

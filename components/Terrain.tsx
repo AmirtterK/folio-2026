@@ -530,10 +530,11 @@ function buildTerrain(): TerrainData {
   /* golden achievement trophy pedestal landmark */
   solids.push({ x: TROPHY_POS.x, z: TROPHY_POS.z, r: 0.75 });
   // Logo obstacles at track center
-  solids.push({ x: 0, z: 0, r: 1.0 });
-  solids.push({ x: 3, z: 0, r: 1.0 });
-  solids.push({ x: -3, z: 0, r: 1.0 });
-  solids.push({ x: 0, z: 4, r: 1.0 });
+  // Logo obstacles on the main straight
+  solids.push({ x: 15, z: 57, r: 0.6 });
+  solids.push({ x: 5, z: 57, r: 0.6 });
+  solids.push({ x: -5, z: 57, r: 0.6 });
+  solids.push({ x: -15, z: 57, r: 0.6 });
 
   /* holographic chess knight landmark */
   solids.push({ x: KNIGHT_POS.x, z: KNIGHT_POS.z, r: 0.9 });

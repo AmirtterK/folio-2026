@@ -683,10 +683,10 @@ export default function FolioScene() {
               />
               <MobileTapHandler pose={pose} />
               <CarLoadingHologram pose={pose} visible={!carLoaded} night={night} />
-              <LogoObstacle position={[0, 0.8, 0]} color="#D97757" pose={pose} id="claude" velocities={obstacleVelocities} />
-              <LogoObstacle position={[3, 0.8, 0]} color="#7A9DFF" pose={pose} id="codex" velocities={obstacleVelocities} />
-              <LogoObstacle position={[-3, 0.8, 0]} color="#ffffff" pose={pose} id="chatgpt" velocities={obstacleVelocities} />
-              <LogoObstacle position={[0, 0.8, 4]} color="#EEEEEE" pose={pose} id="lobe" velocities={obstacleVelocities} />
+              <LogoObstacle position={[15, 0, 57]} color="#D97757" label="C" pose={pose} id="claude" velocities={obstacleVelocities} />
+              <LogoObstacle position={[5, 0, 57]} color="#7A9DFF" label="X" pose={pose} id="codex" velocities={obstacleVelocities} />
+              <LogoObstacle position={[-5, 0, 57]} color="#ffffff" label="G" pose={pose} id="chatgpt" velocities={obstacleVelocities} />
+              <LogoObstacle position={[-15, 0, 57]} color="#EEEEEE" label="L" pose={pose} id="lobe" velocities={obstacleVelocities} />
               <FolioCar
                 key={`car-${carResetKey}-${carModel}`}
                 color={color}

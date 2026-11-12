@@ -810,7 +810,7 @@ export function FolioTopDownCam({
     if (s.inspectAlpha > 0.001 && inspectCamPos && inspectTarget) {
       // On narrow screens the holographic text column is wider than the viewport, so back the
       // inspection camera off along the same sight line until the whole landmark + text fits.
-      const pull = mobile && viewAspect < 1 ? Math.min(3.0, 1.6 / viewAspect) : (viewAspect < 1 ? Math.min(2.2, 1 / viewAspect) : 1);
+      const pull = mobile && viewAspect < 1 ? 1.0 : (viewAspect < 1 ? Math.min(2.2, 1 / viewAspect) : 1);
       s.tmpPos.copy(inspectCamPos).sub(inspectTarget).multiplyScalar(pull).add(inspectTarget);
       // Smoothly blend position between driving overhead and inspection angle
       camera.position.lerpVectors(driveCamPos, s.tmpPos, s.inspectAlpha);

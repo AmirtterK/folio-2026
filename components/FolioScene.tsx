@@ -282,7 +282,7 @@ export default function FolioScene() {
   const inspectViews = useMemo(() => {
     const make = (x: number, z: number) => {
       const y = groundHeight(x, z);
-      const back = isTouch ? 14.0 : 10.0;
+      const back = isTouch ? 8.0 : 10.0;
       return {
         target: new THREE.Vector3(x + 0.9, y + 2.3, z),
         cam: new THREE.Vector3(x + 0.9, y + 2.4, z + back),
@@ -613,7 +613,7 @@ export default function FolioScene() {
         <Canvas
           key={view === "track" ? "track" : "lab"}
           shadows
-          dpr={[1, 1.5]}
+          dpr={[1, 2]}
           frameloop={showMinimap ? "never" : "always"}
           camera={
             view === "track"

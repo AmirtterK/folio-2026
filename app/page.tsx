@@ -31,7 +31,7 @@ export default function Page() {
             height: 46,
             borderRadius: "50%",
             border: "4px solid rgba(255,255,255,0.14)",
-            borderTopColor: "#ff7a1a",
+            borderTopColor: "#111111",
             animation: "bootSpin 0.9s linear infinite",
           }}
         />

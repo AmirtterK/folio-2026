@@ -74,7 +74,7 @@ function LoadingScreen({ progress, visible }: { progress: number; visible: boole
         <circle
           cx={70} cy={70} r={r}
           fill="none"
-          stroke="#ff7a1a"
+          stroke="#111111"
           strokeWidth={stroke}
           strokeLinecap="round"
           strokeDasharray={`${dash} ${circ}`}
@@ -559,7 +559,7 @@ export default function FolioScene() {
       className="folio-drive-btn"
       style={{
         ...BTN,
-        ...(pressed[k] ? { backgroundColor: "#ff7a1a", color: "#fff", borderColor: "#ff7a1a" } : {}),
+        ...(pressed[k] ? { backgroundColor: "#111111", color: "#fff", borderColor: "#111111" } : {}),
       }}
       onPointerDown={(e) => {
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -909,8 +909,8 @@ export default function FolioScene() {
                 borderRadius: 9,
                 borderWidth: 1.5,
                 borderStyle: "solid",
-                borderColor: freeCam ? "#ff7a1a" : "#cfc8bd",
-                backgroundColor: freeCam ? "#ff7a1a" : "#fffdf9",
+                borderColor: freeCam ? "#111111" : "#cfc8bd",
+                backgroundColor: freeCam ? "#111111" : "#fffdf9",
                 color: freeCam ? "#ffffff" : "#2a2622",
                 fontSize: 12.5,
                 fontWeight: 600,
@@ -987,7 +987,7 @@ export default function FolioScene() {
               boxShadow: "0 2px 6px rgba(0,0,0,0.06)",
             }}
           >
-            Speed <span ref={speedRef} style={{ fontSize: 18, fontWeight: 700, color: "#ff7a1a" }}>0.0</span> u/s
+            Speed <span ref={speedRef} style={{ fontSize: 18, fontWeight: 700, color: "#111111" }}>0.0</span> u/s
           </div>
 
           {/* On-screen touch buttons for mobile / mouse */}

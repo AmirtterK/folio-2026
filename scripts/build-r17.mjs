@@ -9,7 +9,7 @@
  *   1. cuts all four wheels out of the mesh by geometry (a cylinder around each axle),
  *   2. splits every wheel into tire + rim, and the body into paint / glass / trim / lamp / tail / chrome,
  *   3. moves everything into the toy car's coordinate system (forward = +Z, ground at y = 0, scaled so the
- *      wheelbase is 2.4 like ToyCarSmoke), with each wheel's origin ON its axle so it spins in place,
+ *      wheelbase is 2.4 like FolioCar), with each wheel's origin ON its axle so it spins in place,
  *   4. computes creased smooth normals (the source has none),
  *   5. writes a GLB:   R17 > Body
  *                           > Steer_FL > Wheel_FL      (steering pivot, then spinning wheel)
@@ -33,7 +33,7 @@ const RADIUS = 0.1511;          // tire radius
 const WZ0 = 0.2697, WZ1 = 0.3935; // wheel z extent on the +z side (mirrored for -z)
 const TOL_R = 0.007;            // radial slack: the tread sits a little outside the nominal radius
 const TOL_Z = 0.004;            // axial slack
-const WHEELBASE_TARGET = 2.4;   // ToyCarSmoke's WHEEL_Z * 2
+const WHEELBASE_TARGET = 2.4;   // FolioCar's WHEEL_Z * 2
 const SCALE = WHEELBASE_TARGET / (AX_REAR - AX_FRONT);
 // Dense scan facets need a generous smoothing angle. True changes (lamp recesses, panel edges and wheel wells)
 // still remain separate meshes/materials below, so they do not need to be expressed as rough paint shading.

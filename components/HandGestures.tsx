@@ -23,7 +23,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, MutableRefObject } from "react";
 import type { HandLandmarker } from "@mediapipe/tasks-vision";
-import type { CarInput } from "@/components/ToyCar";
+import type { CarInput } from "@/components/FolioCarBase";
 
 export type Pressed = Partial<Record<keyof CarInput, boolean>>;
 

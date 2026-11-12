@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { groundHeight } from "@/components/Terrain";
 import { KNIGHT_POS } from "@/components/landmarkConfig";
 import HolographicMaterial, { type HolographicMaterialProps } from "@/components/HolographicMaterial";
-import HologramBase, { HOLO_COLOR } from "@/components/HologramBase";
+import HologramBase, { HOLO_COLOR, LANDMARK_BASE_SIZE } from "@/components/HologramBase";
 
 export { KNIGHT_POS };
 
@@ -116,7 +116,7 @@ export default function ChessKnight({ night = true, hologram }: ChessKnightProps
 
   return (
     <group position={[KNIGHT_POS.x, y, KNIGHT_POS.z]}>
-      <HologramBase night={night} lightY={1.45}>
+      <HologramBase night={night} size={LANDMARK_BASE_SIZE} lightY={1.45}>
         {/* the knight, turning slowly */}
         <group ref={spinRef} scale={KNIGHT_SCALE}>
           <mesh geometry={geos.body}>

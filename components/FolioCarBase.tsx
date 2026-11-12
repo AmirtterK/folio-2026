@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * ToyCar (detailed): a sculpted coupe with a curved, bevelled body, real wheel
+ * FolioCarBase (detailed): a sculpted coupe with a curved, bevelled body, real wheel
  * arches, glossy clearcoat paint, tinted glass, rounded tires, spoked rims,
  * brake discs and calipers, headlights, tail lights, mirrors, spoiler and exhausts.
  *
@@ -16,19 +16,19 @@
  *
  *   import { Canvas } from "@react-three/fiber";
  *   import { OrbitControls, Environment } from "@react-three/drei";
- *   import ToyCar from "@/components/ToyCar";
+ *   import FolioCarBase from "@/components/FolioCarBase";
  *
  *   <Canvas camera={{ position: [6, 3.5, 7], fov: 40 }}>
  *     <Environment preset="city" />          // reflections make the paint look glossy
  *     <directionalLight position={[4, 7, 5]} intensity={1.2} />
- *     <ToyCar />
+ *     <FolioCarBase />
  *     <OrbitControls target={[0, 1, 0]} />
  *   </Canvas>
  *
  * To drive it from your own UI (touch buttons, gamepad, zustand store):
  *
  *   const input = useRef<CarInput>({ fwd: 0, back: 0, left: 0, right: 0, brake: 0 });
- *   <ToyCar keyboard={false} input={input} />
+ *   <FolioCarBase keyboard={false} input={input} />
  */
 
 import { useEffect, useMemo, useRef } from "react";
@@ -40,7 +40,7 @@ import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.j
 
 export type CarInput = { fwd: number; back: number; left: number; right: number; brake: number };
 
-export type ToyCarProps = {
+export type FolioCarBaseProps = {
   /** Paint color. */
   color?: string;
   /** Listen to the keyboard. Set false if you supply your own `input`. */
@@ -235,7 +235,7 @@ function Wheel({ side, z, mats, tireGeo, spinRef, pivotRef }: WheelProps) {
 
 /* ---------- car ---------- */
 
-export default function ToyCar({
+export default function FolioCarBase({
   color = "#ff7a1a",
   keyboard = true,
   input,
@@ -243,7 +243,7 @@ export default function ToyCar({
   maxSteer = 0.55,
   onSpeed,
   ...groupProps
-}: ToyCarProps) {
+}: FolioCarBaseProps) {
   const carRef = useRef<THREE.Group>(null);
   const spinGroups = useRef<THREE.Group[]>([]);
   const steerPivots = useRef<THREE.Group[]>([]);

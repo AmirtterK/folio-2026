@@ -1,8 +1,14 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
-  title: "Toy car lab",
+  title: "Folio 2026",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -11,8 +17,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body
         style={{
           margin: 0,
+          overflow: "hidden",
+          overscrollBehavior: "none",
           background: "#ece8e1",
           fontFamily: '"Trebuchet MS", "Segoe UI", system-ui, sans-serif',
+          WebkitTapHighlightColor: "transparent",
         }}
       >
         {children}

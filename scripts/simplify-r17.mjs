@@ -7,7 +7,7 @@
  * Input:  scripts/r17/r17.full-backup.glb   (the full 579k-triangle car built by build-r17.mjs; never overwritten)
  * Output: public/models/r17.glb             (what the game loads)
  *
- * Node names (R17 > Body / Steer_* / Wheel_*) and material names are untouched, so ToyCarSmoke keeps working.
+ * Node names (R17 > Body / Steer_* / Wheel_*) and material names are untouched, so FolioCar keeps working.
  * Mesh borders are locked so the paint / glass / trim parts never open cracks between each other.
  * To go back to the full car:  copy scripts/r17/r17.full-backup.glb over public/models/r17.glb
  */

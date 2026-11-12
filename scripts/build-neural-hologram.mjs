@@ -3,7 +3,7 @@
 // Reads the trained weights of the neural-flows project and keeps only the strongest connections
 // (largest |weight|) into each neuron, so the landmark ships a few KB instead of the 1.2 MB weights file.
 //
-// Usage (from the toy-car-lab folder):
+// Usage (from the folio-2026 folder):
 //   node scripts/build-neural-hologram.mjs "C:\path\to\neural-flows\data\model_weights.json"
 
 import fs from "node:fs";

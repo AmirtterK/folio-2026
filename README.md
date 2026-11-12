@@ -1,10 +1,10 @@
-# Toy car lab
+# Folio 2026
 
-A small Next.js test bench for the toy car models, using the same stack as Neural Flows (Next.js 15, React 19, R3F 9, drei 10, three 0.170).
+A small Next.js test bench for the portfolio car models, using the same stack as Neural Flows (Next.js 16, React 19, R3F 9, drei 10, three 0.170).
 
-- **Detailed + smoke:** `components/ToyCarSmoke.tsx`, a separate copy of the detailed car with exhaust smoke.
-- **Detailed:** `components/ToyCar.tsx`, the safe original. Edit the smoke version, not this one.
-- **Classic (HTML):** `public/toy-car.html`, the standalone low-poly version (loads Three.js r128 from a CDN).
+- **Detailed + smoke:** `components/FolioCar.tsx`, the main car with exhaust smoke and all selectable models.
+- **Detailed:** `components/FolioCarBase.tsx`, the safe original. Edit the smoke version, not this one.
+- **Classic (HTML):** `public/classic-car.html`, the standalone low-poly version (loads Three.js r128 from a CDN).
 
 ## Run
 
@@ -22,11 +22,14 @@ Open http://localhost:3000. Use the tabs at the top left to switch between the v
 | W / S or Up / Down | drive forward / reverse |
 | A / D or Left / Right | steer |
 | Space | brake |
-| On-screen buttons | same as the keys |
+| On-screen buttons | same as the keys (mobile-friendly) |
+| M or **Map** button | open the full-screen track map |
+| R | reset the car to the grid |
+| F | toggle free camera |
 | Hand gestures | tick **Hand gestures** (top bar), see below |
 | Drag / scroll | orbit / zoom |
 
-The "Paint" picker changes the car's color, and the "Smoke" checkbox toggles the exhaust on the smoke version.
+The "Paint" picker changes the car's color, and the "Smoke" checkbox toggles the exhaust on the smoke version. On phones, the top bar scrolls horizontally and the driving buttons sit above the safe area.
 
 ## Hand gestures
 
@@ -46,19 +49,19 @@ Hand tracking is MediaPipe's Hand Landmarker (`@mediapipe/tasks-vision`) and run
 
 ## Smoke
 
-`ToyCarSmoke` takes the same props as `ToyCar`, plus `smoke` (default true) and `smokeColor`. Both tailpipes puff while the car drives, more with throttle and speed. Puffs blow backward (forward when reversing) so the stationary car looks like it is moving. Nothing comes out when stopped.
+`FolioCar` takes the same props as `FolioCarBase`, plus `smoke` (default true) and `smokeColor`. The exhaust layout follows each car: the S15 and Stingray use a single left-side tip, while the Panamera and F599 use twin tips. Puffs blow backward (forward when reversing) so the stationary car looks like it is moving. Nothing comes out when stopped.
 
 ## Layout
 
 ```
 app/layout.tsx              root layout
-app/page.tsx                loads CarLab with SSR off (WebGL is browser-only)
-components/CarLab.tsx       tabs, buttons, color picker, canvas
+app/page.tsx                loads FolioScene with SSR off (WebGL is browser-only)
+components/FolioScene.tsx   tabs, buttons, color picker, canvas
 components/HandGestures.tsx webcam hand-gesture controls (MediaPipe)
 scripts/copy-mediapipe.mjs  copies the MediaPipe WASM runtime into public/
-components/ToyCar.tsx       the detailed car (safe copy)
-components/ToyCarSmoke.tsx  the detailed car with exhaust smoke
-public/toy-car.html         classic version
+components/FolioCarBase.tsx the detailed car (safe copy)
+components/FolioCar.tsx     the detailed car with exhaust smoke
+public/classic-car.html     classic version
 ```
 
 ## Notes

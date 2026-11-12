@@ -11,7 +11,7 @@
  *
  * Use inside a <Canvas shadows>:
  *   <PitLane projects={projects} pose={pose} active={active} onActive={setActive} />
- *   <ToyCarSmoke terrain={flatGround} bounds={pitBounds(projects.length)} pose={pose} ... />
+ *   <FolioCar terrain={flatGround} bounds={pitBounds(projects.length)} pose={pose} ... />
  *   <FollowCam pose={pose} />
  */
 
@@ -19,7 +19,7 @@ import { useEffect, useMemo, useRef } from "react";
 import type { MutableRefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import type { CarPose } from "@/components/ToyCarSmoke";
+import type { CarPose } from "@/components/FolioCar";
 
 export type Project = {
   title: string;

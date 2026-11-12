@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * build-sf90.mjs: turns the Draco-compressed Ferrari F1 (SF90) GLB into a game-ready car for ToyCarSmoke.
+ * build-sf90.mjs: turns the Draco-compressed Ferrari F1 (SF90) GLB into a game-ready car for FolioCar.
  *
  *   node scripts/build-sf90.mjs [input.glb] [output.glb]
  *
@@ -10,7 +10,7 @@
  * as separate tire + rim + decal nodes. This script:
  *   1. decodes Draco and bakes every node's world transform into the vertices (mirrored nodes get their winding fixed),
  *   2. moves the car into the toy car's coordinate system (forward = +Z, ground at y = 0, scaled so the wheelbase is 2.4
- *      like ToyCarSmoke, wheelbase centred on the origin),
+ *      like FolioCar, wheelbase centred on the origin),
  *   3. cuts the wheels out (tire + rim + sidewall decals) with each wheel's origin ON its axle so it spins in place,
  *   4. merges the rest of the car into one Body mesh (one primitive per material) and simplifies the heavy scan-like geometry,
  *   5. writes a GLB:   SF90 > Body
@@ -32,7 +32,7 @@ import { MeshoptSimplifier } from "meshoptimizer";
 
 const IN = process.argv[2] ?? "scripts/sf90/sf90.glb";
 const OUT = process.argv[3] ?? "public/models/sf90.glb";
-const WHEELBASE_TARGET = 2.4; // ToyCarSmoke's WHEEL_Z * 2
+const WHEELBASE_TARGET = 2.4; // FolioCar's WHEEL_Z * 2
 const SIMPLIFY_RATIO = 0.28;  // fraction of triangles to keep (the source is 650k triangles)
 const SIMPLIFY_ERROR = 0.0012; // max error, relative to the mesh size
 

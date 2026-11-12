@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import type { MutableRefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import type { CarPose } from "@/components/ToyCarSmoke";
+import type { CarPose } from "@/components/FolioCar";
 
 /* ---------- Monza Circuit Accurate Layout & Coordinates ---------- */
 

@@ -7,7 +7,7 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { groundHeight } from "@/components/Terrain";
 import { NEURAL_POS } from "@/components/landmarkConfig";
 import HolographicMaterial, { type HolographicMaterialProps } from "@/components/HolographicMaterial";
-import HologramBase, { HOLO_COLOR } from "@/components/HologramBase";
+import HologramBase, { HOLO_COLOR, LANDMARK_BASE_SIZE } from "@/components/HologramBase";
 import netData from "@/data/neuralHologram.json";
 
 export { NEURAL_POS };
@@ -269,7 +269,7 @@ export default function NeuralNetworkHologram({ night = true, hologram }: Neural
 
   return (
     <group position={[NEURAL_POS.x, y, NEURAL_POS.z]}>
-      <HologramBase night={night} size={1.35} ringEnd={4.2} lightY={1.9}>
+      <HologramBase night={night} size={LANDMARK_BASE_SIZE} ringEnd={4.2} lightY={1.9}>
         <group ref={spinRef} position={[0, NET_Y, 0]} scale={NET_SCALE}>
           <mesh geometry={net.nodesGeo}>
             <HolographicMaterial {...holo} />

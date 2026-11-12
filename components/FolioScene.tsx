@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
-import ToyCarSmoke from "@/components/ToyCarSmoke";
-import type { CarInput } from "@/components/ToyCar";
-import type { CarPose } from "@/components/ToyCarSmoke";
+import FolioCar from "@/components/FolioCar";
+import type { CarInput } from "@/components/FolioCarBase";
+import type { CarModel, CarPose } from "@/components/FolioCar";
 import {
   RacingTrack,
   FolioTopDownCam,
@@ -27,7 +27,6 @@ import NeuralNetworkHologram from "@/components/NeuralNetworkHologram";
 import { TROPHY_POS } from "@/components/landmarkConfig";
 
 type View = "track" | "smoke" | "html";
-type CarModel = "r17" | "sf90";
 
 /** Trees, bushes, rocks and stones farther than this from the car are not drawn (free cam draws everything). */
 const SCENERY_RADIUS = 100;
@@ -232,14 +231,14 @@ const HINT: React.CSSProperties = {
   textShadow: "0 1px 3px rgba(255,255,255,0.8)",
 };
 
-export default function CarLab() {
+export default function FolioScene() {
   const [view, setView] = useState<View>("track");
   const [color, setColor] = useState("#8d9196");
   const [carModel, setCarModel] = useState<CarModel>("r17");
   const [smokeOn, setSmokeOn] = useState(true);
   const [showCurbs, setShowCurbs] = useState(true);
   const [night, setNight] = useState(true);
-  const [showMinimap, setShowMinimap] = useState(true);
+  const [showMinimap, setShowMinimap] = useState(false);
   const [zoomMultiplier, setZoomMultiplier] = useState(1.0);
   const [carResetKey, setCarResetKey] = useState(0);
   const [pressed, setPressed] = useState<Partial<Record<keyof CarInput, boolean>>>({});
@@ -266,7 +265,7 @@ export default function CarLab() {
   inspectingTrophyRef.current = inspectingTrophy;
 
   const emptyInput = useRef<CarInput>({ fwd: 0, back: 0, left: 0, right: 0, brake: 1 });
-  // Free-cam movement keys (WASD) — kept separate from the car's input so arrows can still drive
+  // Free-cam movement keys (WASD) â€” kept separate from the car's input so arrows can still drive
   const camKeys = useRef<CarInput>({ fwd: 0, back: 0, left: 0, right: 0, brake: 0 });
 
   const handleTrophyNearChange = useCallback((near: boolean) => {
@@ -278,14 +277,15 @@ export default function CarLab() {
 
   const trophyY = groundHeight(TROPHY_POS.x, TROPHY_POS.z);
   // Standing view: camera at eye level, shifted right of the cup (same heading, no turn), so the
-  // cup sits on the left and the 3D hover panel (x +0.75..+2.2 from the cup) sits beside it.
+  // cup sits on the left and the floating holographic writing sits beside it.
   const inspectTarget = useMemo(
-    () => new THREE.Vector3(TROPHY_POS.x + 0.78, trophyY + 1.45, TROPHY_POS.z),
+    () => new THREE.Vector3(TROPHY_POS.x + 0.85, trophyY + 2.3, TROPHY_POS.z),
     [trophyY]
   );
-  // fov is 26, so 6.6 back fits the whole slender trophy (about 2.9 high with the ruby) and the panel.
+  // fov is 26, so 10 back frames the whole trophy on its shared landmark base (about 4.0 high)
+  // plus the taller holographic text column without cropping the projector foot.
   const inspectCamPos = useMemo(
-    () => new THREE.Vector3(TROPHY_POS.x + 0.78, trophyY + 1.55, TROPHY_POS.z + 6.6),
+    () => new THREE.Vector3(TROPHY_POS.x + 0.85, trophyY + 2.4, TROPHY_POS.z + 10.0),
     [trophyY]
   );
 
@@ -307,8 +307,8 @@ export default function CarLab() {
   }, []);
 
   // Synthetic progress: terrain build is synchronous and heavy, so we simulate
-  // progress from 0→70% over 2.5s while buildTerrain() runs, then drei's
-  // useProgress fills in the final 70→100% as textures upload.
+  // progress from 0â†’70% over 2.5s while buildTerrain() runs, then drei's
+  // useProgress fills in the final 70â†’100% as textures upload.
   useEffect(() => {
     if (sceneReady) { setLoadProgress(100); return; }
     if (!canvasDeferred) return;
@@ -346,8 +346,41 @@ export default function CarLab() {
   // Keyboard input
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      const typing = tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable;
+      if (typing) return;
+      // The car dropdown keeps focus after a pick. Let it handle menu navigation, but any other
+      // key should blur it and reach the game shortcuts instead of the select's type-ahead
+      // jumping to "Ferrari" / "Renault" and silently changing the car.
+      if (tag === "SELECT") {
+        const menuKeys = [
+          "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+          "Enter", "NumpadEnter", "Escape", "Space", "Tab",
+          "Home", "End", "PageUp", "PageDown",
+        ];
+        if (menuKeys.includes(e.code)) return;
+        target?.blur();
+        e.preventDefault();
+      }
+
+      // Map overlay: M toggles, Esc closes, and driving shortcuts pause while it is open.
+      if (e.code === "KeyM" && !e.repeat) {
+        e.preventDefault();
+        setShowMinimap((v) => !v);
+        return;
+      }
+      if (showMinimap) {
+        if (e.code === "Escape") {
+          e.preventDefault();
+          setShowMinimap(false);
+        }
+        return;
+      }
+
       // Free cam: F toggles, Esc exits
       if (e.code === "KeyF" && !e.repeat) {
+        e.preventDefault();
         setInspectingTrophy(false);
         setFreeCam((v) => !v);
         return;
@@ -389,9 +422,6 @@ export default function CarLab() {
       if (e.code === "KeyR") {
         resetCar();
       }
-      if (e.code === "KeyM") {
-        setShowMinimap((v) => !v);
-      }
     };
     const up = (e: KeyboardEvent) => {
       const camK = CAM_KEYS[e.code];
@@ -405,7 +435,7 @@ export default function CarLab() {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
     };
-  }, [resetCar]);
+  }, [resetCar, showMinimap]);
 
   // Mouse wheel zoom in track view
   const handleWheel = useCallback(
@@ -416,9 +446,12 @@ export default function CarLab() {
     [view]
   );
 
-  // Leaving the track view always ends free cam
+  // Leaving the track view always ends free cam and closes the full-screen map.
   useEffect(() => {
-    if (view !== "track") setFreeCam(false);
+    if (view !== "track") {
+      setFreeCam(false);
+      setShowMinimap(false);
+    }
   }, [view]);
 
   // Entering/leaving free cam: drop any held movement so nothing gets stuck or drives off
@@ -439,6 +472,7 @@ export default function CarLab() {
   const hold = (k: keyof CarInput, label: string, aria: string) => (
     <button
       aria-label={aria}
+      className="folio-drive-btn"
       style={{
         ...BTN,
         ...(pressed[k] ? { backgroundColor: "#ff7a1a", color: "#fff", borderColor: "#ff7a1a" } : {}),
@@ -457,6 +491,7 @@ export default function CarLab() {
   const tab = (id: View, text: string) => (
     <button
       onClick={() => setView(id)}
+      className="folio-tab"
       style={{
         padding: "8px 14px",
         borderRadius: 10,
@@ -468,32 +503,6 @@ export default function CarLab() {
         color: view === id ? "#fffdf9" : "#2a2622",
         font: "inherit",
         fontWeight: view === id ? 600 : 500,
-        boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-      }}
-    >
-      {text}
-    </button>
-  );
-
-  const carTab = (id: CarModel, text: string) => (
-    <button
-      onClick={() => {
-        if (id === carModel) return;
-        setCarModel(id);
-        resetCar(); // respawn on the grid with the new car
-      }}
-      style={{
-        padding: "6px 11px",
-        borderRadius: 9,
-        borderWidth: 1.5,
-        borderStyle: "solid",
-        borderColor: carModel === id ? "#ff7a1a" : "#cfc8bd",
-        cursor: "pointer",
-        backgroundColor: carModel === id ? "#ff7a1a" : "#fffdf9",
-        color: carModel === id ? "#ffffff" : "#2a2622",
-        font: "inherit",
-        fontSize: 12.5,
-        fontWeight: carModel === id ? 700 : 500,
         boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
       }}
     >
@@ -564,11 +573,12 @@ export default function CarLab() {
               <NeuralNetworkHologram night={night} />
               <AchievementTrophy
                 pose={pose}
+                night={night}
                 inspecting={inspectingTrophy}
                 onNearChange={handleTrophyNearChange}
                 onInspectToggle={setInspectingTrophy}
               />
-              <ToyCarSmoke
+              <FolioCar
                 key={`car-${carResetKey}-${carModel}`}
                 color={color}
                 keyboard={false}
@@ -582,7 +592,7 @@ export default function CarLab() {
                 bounds={TERRAIN_BOUNDS}
                 start={TRACK_START}
                 maxSpeed={18}
-                carScale={0.65}
+                carScale={0.75075}
                 model={carModel}
                 headlights={night}
               />
@@ -601,17 +611,18 @@ export default function CarLab() {
               <ambientLight intensity={0.8} />
               <hemisphereLight args={["#ffffff", "#555555", 0.5]} />
               <directionalLight position={[4, 7, 5]} intensity={1.2} />
-              <ToyCarSmoke key={carModel} color={color} keyboard={false} input={input} onSpeed={onSpeed} smoke={smokeOn} model={carModel} />
+              <FolioCar key={carModel} color={color} keyboard={false} input={input} onSpeed={onSpeed} smoke={smokeOn} carScale={1.155} model={carModel} />
               <OrbitControls target={[0, 1, 0]} />
             </>
           )}
         </Canvas>
       ) : (
-        <iframe title="Classic toy car" src="/toy-car.html" style={{ width: "100%", height: "100%", border: 0 }} />
+        <iframe title="Classic car" src="/classic-car.html" style={{ width: "100%", height: "100%", border: 0 }} />
       )}
 
       {/* Top Header Controls Bar */}
       <div
+        className="folio-toolbar"
         style={{
           position: "fixed",
           top: 14,
@@ -627,18 +638,57 @@ export default function CarLab() {
           boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
         }}
       >
-        {tab("track", "🏁 Racing Track")}
-        {tab("smoke", "🏎️ Detailed Car")}
+        {tab("track", "ðŸ Racing Track")}
+        {tab("smoke", "ðŸŽï¸ Detailed Car")}
         {tab("html", "Classic (HTML)")}
 
         {is3d && (
-          <div style={{ display: "flex", gap: 4, marginLeft: 8 }}>
-            {carTab("r17", "Renault R17")}
-            {carTab("sf90", "Ferrari SF90")}
-          </div>
+          <label
+            style={{
+              display: "flex",
+              gap: 6,
+              alignItems: "center",
+              marginLeft: 8,
+              color: "#2a2622",
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            Car
+            <select
+              className="folio-select"
+              value={carModel}
+              onChange={(e) => {
+                const next = e.target.value as CarModel;
+                if (next === carModel) return;
+                setCarModel(next);
+                resetCar(); // respawn on the grid with the new car
+                e.currentTarget.blur();
+              }}
+              style={{
+                padding: "6px 10px",
+                borderRadius: 9,
+                border: "1.5px solid #cfc8bd",
+                backgroundColor: "#fffdf9",
+                color: "#2a2622",
+                font: "inherit",
+                fontSize: 12.5,
+                fontWeight: 600,
+                cursor: "pointer",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+              }}
+            >
+              <option value="r17">Renault R17</option>
+              <option value="sf90">Ferrari SF90</option>
+              <option value="nissan">Nissan Silvia S15</option>
+              <option value="porsche">Porsche Panamera</option>
+              <option value="ferrari">Ferrari F599</option>
+              <option value="corvette">Corvette Stingray</option>
+            </select>
+          </label>
         )}
 
-        {is3d && carModel !== "sf90" && (
+        {is3d && carModel === "r17" && (
           <label
             style={{
               display: "flex",
@@ -720,25 +770,27 @@ export default function CarLab() {
               Night
             </label>
 
-            <label
+            <button
+              onClick={() => setShowMinimap(true)}
+              title="Open map (or press 'M')"
+              className="folio-map-btn"
               style={{
-                display: "flex",
-                gap: 6,
-                alignItems: "center",
-                marginLeft: 8,
+                padding: "7px 12px",
+                borderRadius: 9,
+                borderWidth: 1.5,
+                borderStyle: "solid",
+                borderColor: "#cfc8bd",
+                backgroundColor: "#fffdf9",
                 color: "#2a2622",
-                fontSize: 13,
+                fontSize: 12.5,
                 fontWeight: 600,
                 cursor: "pointer",
+                marginLeft: 4,
+                boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
               }}
             >
-              <input
-                type="checkbox"
-                checked={showMinimap}
-                onChange={(e) => setShowMinimap(e.target.checked)}
-              />
-              Minimap
-            </label>
+              🗺️ Map
+            </button>
 
             <button
               onClick={() => {
@@ -761,7 +813,7 @@ export default function CarLab() {
                 boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
               }}
             >
-              {freeCam ? "✕ Exit free cam [F]" : "🎥 Free cam [F]"}
+              {freeCam ? "âœ• Exit free cam [F]" : "ðŸŽ¥ Free cam [F]"}
             </button>
 
             <button
@@ -782,7 +834,7 @@ export default function CarLab() {
                 boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
               }}
             >
-              ⟲ Reset [R]
+              âŸ² Reset [R]
             </button>
           </>
         )}
@@ -813,10 +865,11 @@ export default function CarLab() {
       {is3d && (
         <>
           <div
+            className="folio-speed"
             style={{
               position: "fixed",
-              top: 14,
-              right: 18,
+              bottom: 92,
+              right: 20,
               color: "#2a2622",
               backgroundColor: "rgba(255,253,249,0.85)",
               padding: "6px 14px",
@@ -833,6 +886,7 @@ export default function CarLab() {
 
           {/* On-screen touch buttons for mobile / mouse */}
           <div
+            className="folio-touch"
             style={{
               position: "fixed",
               bottom: 18,
@@ -844,13 +898,13 @@ export default function CarLab() {
               zIndex: 10,
             }}
           >
-            <div style={{ display: "flex", gap: 10, pointerEvents: "auto" }}>
-              {hold("left", "◀", "Steer left")}
-              {hold("right", "▶", "Steer right")}
+            <div className="folio-touch-group" style={{ display: "flex", gap: 10, pointerEvents: "auto" }}>
+              {hold("left", "â—€", "Steer left")}
+              {hold("right", "â–¶", "Steer right")}
             </div>
-            <div style={{ display: "flex", gap: 10, pointerEvents: "auto" }}>
-              {hold("back", "▼", "Reverse")}
-              {hold("fwd", "▲", "Forward")}
+            <div className="folio-touch-group" style={{ display: "flex", gap: 10, pointerEvents: "auto" }}>
+              {hold("back", "â–¼", "Reverse")}
+              {hold("fwd", "â–²", "Forward")}
             </div>
           </div>
         </>
@@ -866,26 +920,112 @@ export default function CarLab() {
           pose={pose}
           visible={showMinimap}
           onToggle={() => setShowMinimap((v) => !v)}
-          onReset={resetCar}
         />
       )}
 
       {view === "track" && (
-        <div style={night ? { ...HINT, color: "#c9d1ff", textShadow: "0 1px 3px rgba(0,0,0,0.8)" } : HINT}>
+        <div className="folio-hint" style={night ? { ...HINT, color: "#c9d1ff", textShadow: "0 1px 3px rgba(0,0,0,0.8)" } : HINT}>
           {freeCam
-            ? "FREE CAM • WASD to move camera • Arrows to drive • Drag to orbit • Right-drag to pan • Scroll to zoom • F or Esc to go back"
-            : "WASD or Arrow Keys to steer • Space to brake • Scroll wheel to zoom • M for Minimap • R to reset • F for free cam"}
+            ? "FREE CAM â€¢ WASD to move camera â€¢ Arrows to drive â€¢ Drag to orbit â€¢ Right-drag to pan â€¢ Scroll to zoom â€¢ F or Esc to go back"
+            : "WASD or Arrow Keys to steer â€¢ Space to brake â€¢ Scroll wheel to zoom â€¢ M for map â€¢ R to reset â€¢ F for free cam"}
         </div>
       )}
 
-      {/* Loading overlay — covers everything until the scene is built */}
+      {/* Loading overlay â€” covers everything until the scene is built */}
       <LoadingScreen progress={loadProgress} visible={!sceneReady} />
 
-      {/* Global CSS keyframes for DOM overlays */}
+      {/* Global CSS keyframes and responsive layout for DOM overlays */}
       <style>{`
         @keyframes pillFloat {
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-4px); }
+        }
+
+        .folio-toolbar {
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
+        }
+        .folio-toolbar::-webkit-scrollbar { display: none; }
+
+        @media (max-width: 760px) {
+          .folio-toolbar {
+            top: max(8px, env(safe-area-inset-top)) !important;
+            left: 8px !important;
+            right: 8px !important;
+            padding: 6px 8px !important;
+            gap: 6px !important;
+            flex-wrap: nowrap !important;
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+            border-radius: 12px !important;
+          }
+          .folio-toolbar > * { flex: 0 0 auto; }
+          .folio-toolbar .folio-map-btn { order: -1; }
+          .folio-toolbar > label {
+            margin-left: 2px !important;
+            font-size: 12px !important;
+            white-space: nowrap;
+          }
+          .folio-toolbar > label > span,
+          .folio-toolbar > label { white-space: nowrap; }
+          .folio-toolbar .folio-tab {
+            padding: 7px 10px !important;
+            font-size: 12px !important;
+          }
+          .folio-toolbar .folio-map-btn,
+          .folio-toolbar button {
+            padding: 7px 10px !important;
+            font-size: 12px !important;
+          }
+          .folio-toolbar .folio-select {
+            max-width: 148px;
+            padding: 5px 8px !important;
+            font-size: 12px !important;
+          }
+          .folio-speed {
+            top: auto !important;
+            bottom: max(70px, calc(env(safe-area-inset-bottom) + 62px)) !important;
+            right: 10px !important;
+            padding: 4px 10px !important;
+            font-size: 12px !important;
+          }
+          .folio-speed span { font-size: 16px !important; }
+          .folio-touch {
+            bottom: max(10px, env(safe-area-inset-bottom)) !important;
+            left: 10px !important;
+            right: 10px !important;
+          }
+          .folio-touch-group { gap: 8px !important; }
+          .folio-drive-btn {
+            width: 52px !important;
+            height: 52px !important;
+            border-radius: 14px !important;
+            font-size: 20px !important;
+          }
+          .folio-hint { display: none !important; }
+        }
+
+        @media (max-width: 420px) {
+          .folio-toolbar {
+            top: max(6px, env(safe-area-inset-top)) !important;
+            left: 6px !important;
+            right: 6px !important;
+            padding: 5px 7px !important;
+            gap: 5px !important;
+          }
+          .folio-toolbar .folio-tab,
+          .folio-toolbar .folio-map-btn,
+          .folio-toolbar button {
+            padding: 6px 8px !important;
+            font-size: 11px !important;
+          }
+          .folio-toolbar .folio-select { max-width: 132px; }
+          .folio-speed { bottom: max(66px, calc(env(safe-area-inset-bottom) + 58px)) !important; }
+          .folio-drive-btn {
+            width: 48px !important;
+            height: 48px !important;
+            font-size: 18px !important;
+          }
         }
       `}</style>
     </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
-import type { CarPose } from "@/components/ToyCarSmoke";
+import type { CarPose } from "@/components/FolioCar";
 import {
   TRACK_SCALE,
   TRACK_CENTER_X,
@@ -24,10 +24,9 @@ type MinimapProps = {
   pose: MutableRefObject<CarPose>;
   visible: boolean;
   onToggle: () => void;
-  onReset?: () => void;
 };
 
-export default function Minimap({ pose, visible, onToggle, onReset }: MinimapProps) {
+export default function Minimap({ pose, visible, onToggle }: MinimapProps) {
   const markerRef = useRef<SVGGElement>(null);
 
   // 60fps silky smooth direct DOM transform update without React re-render
@@ -56,110 +55,49 @@ export default function Minimap({ pose, visible, onToggle, onReset }: MinimapPro
     return () => cancelAnimationFrame(animId);
   }, [pose]);
 
-  if (!visible) {
-    return (
-      <button
-        onClick={onToggle}
-        title="Open Minimap (or press 'M')"
-        style={{
-          position: "fixed",
-          bottom: 20,
-          right: 20,
-          padding: "8px 14px",
-          borderRadius: 12,
-          backgroundColor: "rgba(22, 20, 26, 0.88)",
-          color: "#fff",
-          fontSize: 13,
-          fontWeight: 600,
-          border: "1.5px solid rgba(255, 255, 255, 0.2)",
-          backdropFilter: "blur(8px)",
-          cursor: "pointer",
-          boxShadow: "0 4px 14px rgba(0,0,0,0.25)",
-          zIndex: 10,
-        }}
-      >
-        🗺️ Minimap [M]
-      </button>
-    );
-  }
+  if (!visible) return null;
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Track map. Tap anywhere to close."
+      onClick={onToggle}
       style={{
         position: "fixed",
-        bottom: 20,
-        right: 20,
-        width: 270,
-        borderRadius: 16,
-        backgroundColor: "rgba(22, 20, 26, 0.88)",
-        border: "1.5px solid rgba(255, 255, 255, 0.18)",
-        backdropFilter: "blur(10px)",
-        boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
-        overflow: "hidden",
-        zIndex: 10,
+        inset: 0,
+        zIndex: 100,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding:
+          "max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))",
+        backgroundColor: "#050812",
         userSelect: "none",
-        fontFamily: "system-ui, -apple-system, sans-serif",
+        cursor: "pointer",
       }}
     >
-      {/* Header bar */}
       <div
         style={{
+          width: "min(94vw, 1100px)",
+          maxHeight: "88vh",
           display: "flex",
-          justifyContent: "space-between",
           alignItems: "center",
-          padding: "8px 12px 4px 12px",
-          color: "rgba(255,255,255,0.9)",
-          fontSize: 11,
-          fontWeight: 700,
-          letterSpacing: 0.8,
+          justifyContent: "center",
+          padding: "clamp(6px, 1.4vw, 16px)",
+          border: "1px solid rgba(255, 255, 255, 0.55)",
+          borderRadius: 10,
+          backgroundColor: "#090d1c",
+          boxShadow: "0 0 0 1px rgba(0,0,0,0.6), 0 30px 90px rgba(0,0,0,0.7)",
         }}
       >
-        <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-          <span style={{ color: "#d82424" }}>●</span> MONZA RADAR
-        </span>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          {onReset && (
-            <button
-              onClick={onReset}
-              title="Reset Car (R)"
-              style={{
-                background: "none",
-                border: "none",
-                color: "#ff7a1a",
-                cursor: "pointer",
-                fontSize: 13,
-                padding: "0 4px",
-              }}
-            >
-              ⟲
-            </button>
-          )}
-          <button
-            onClick={onToggle}
-            title="Minimize (M)"
-            style={{
-              background: "none",
-              border: "none",
-              color: "rgba(255,255,255,0.6)",
-              cursor: "pointer",
-              fontSize: 14,
-              padding: "0 2px",
-              lineHeight: 1,
-            }}
-          >
-            ✕
-          </button>
-        </div>
-      </div>
-
-      {/* Circuit Radar SVG */}
-      <div style={{ padding: "4px 8px 8px 8px", display: "flex", justifyContent: "center" }}>
         <svg
           viewBox="-16 -16 548 296"
           style={{
             width: "100%",
             height: "auto",
-            maxHeight: 155,
+            maxHeight: "84vh",
+            display: "block",
             overflow: "visible",
           }}
         >

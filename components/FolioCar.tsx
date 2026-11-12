@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * ToyCarSmoke: a separate copy of ToyCar with exhaust smoke.
+ * FolioCar: the portfolio scene's car, with exhaust smoke.
  *
- * Same car, same controls and props as ToyCar, plus:
+ * Same controls and props as the base car, plus:
  *   smoke       turn the exhaust smoke on or off (default true)
  *   smokeColor  smoke tint (default a warm grey)
  *   headlights  front lights on or off: real spot beams, glowing lenses and a faint light cone
@@ -21,7 +21,7 @@
  * of trees and boulders.
  * `pose` (optional ref) receives its world position and heading every frame.
  *
- * Keep ToyCar.tsx untouched as the safe version; edit this one freely.
+ * FolioCarBase.tsx is the safe base version; edit this one freely.
  */
 
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
@@ -36,7 +36,9 @@ export type CarInput = { fwd: number; back: number; left: number; right: number;
 
 export type CarPose = { x: number; y: number; z: number; yaw: number; speed: number };
 
-export type ToyCarSmokeProps = {
+export type CarModel = "toy" | "r17" | "sf90" | "nissan" | "porsche" | "ferrari" | "corvette";
+
+export type FolioCarProps = {
   /** Paint color. */
   color?: string;
   /** Listen to the keyboard. Set false if you supply your own `input`. */
@@ -72,7 +74,7 @@ export type ToyCarSmokeProps = {
    * or the Ferrari SF90 GLB (public/models/sf90.glb, built by scripts/build-sf90.mjs). The SF90 has no headlights,
    * ONE exhaust plume from the middle of the rear, and a small red dot light at the back instead of light bars.
    */
-  model?: "toy" | "r17" | "sf90";
+  model?: CarModel;
   /** Front lights: real beams, glowing lenses and a light cone. */
   headlights?: boolean;
   /** How visible the light cone is (1 at night, lower in daylight). */
@@ -103,6 +105,42 @@ const SF90_WHEEL_R = 0.2016 * SF90_SCALE;
 const SF90_WHEEL_X = 0.523 * SF90_SCALE;
 const SF90_EXHAUST = { x: 0, y: 0.36 * SF90_SCALE, z: -1.34 * SF90_SCALE }; // the single exhaust tip, centre line, just behind the engine cover
 const SF90_DOT = { y: 0.285, z: -1.64 };           // red dot light on the tip of the rear crash structure, centre line (unscaled: it sits inside the scaled group)
+
+/* Low-poly Sketchfab cars, normalised to the same 2.4 wheelbase as the R17. */
+const PORSCHE_URL = "/models/porsche_panamera.glb";
+const PORSCHE_SCALE = 0.8245;
+const PORSCHE_WHEEL_R = 0.373 * PORSCHE_SCALE;
+const PORSCHE_WHEEL_X = 0.8845 * PORSCHE_SCALE;
+const PORSCHE_Z_SHIFT = -0.0969;
+const PORSCHE_EXHAUST = { x: 0.5, y: 0.3, z: -2.05 }; // twin tips, left + right
+const PORSCHE_LIGHTS = { x: 0.4, y: 0.7, z: -2.0 };
+
+const FERRARI_URL = "/models/ferrari_f599.glb";
+const FERRARI_SCALE = 0.8737;
+const FERRARI_WHEEL_R = 0.3515 * FERRARI_SCALE;
+const FERRARI_WHEEL_X = 0.904 * FERRARI_SCALE;
+const FERRARI_Z_SHIFT = -0.0607;
+const FERRARI_EXHAUST = { x: 0.6, y: 0.28, z: -2.02 }; // twin tips, left + right
+const FERRARI_LIGHTS = { x: 0.627, y: 0.73, z: -1.88 };
+
+const CORVETTE_URL = "/models/corvette_stingray.glb";
+const CORVETTE_SCALE = 0.9153;
+const CORVETTE_WHEEL_R = 0.3735 * CORVETTE_SCALE;
+const CORVETTE_WHEEL_X = 0.807 * CORVETTE_SCALE;
+const CORVETTE_Z_SHIFT = -0.1346;
+const CORVETTE_EXHAUST = { x: 0.692, y: 0.443, z: -2.1, single: true }; // left-side tip only
+const CORVETTE_LIGHTS = { x: 0.59, y: 0.6, z: -2.17 };
+
+/* Nissan Silvia S15, normalised to the same 2.4 wheelbase. */
+const NISSAN_URL = "/models/nissan_silvia_s15.glb";
+const NISSAN_SCALE = 0.4989;
+const NISSAN_WHEEL_R = 0.645 * NISSAN_SCALE;
+const NISSAN_WHEEL_X = 1.3325 * NISSAN_SCALE;
+const NISSAN_Z_SHIFT = -0.0526;
+const NISSAN_Y_SHIFT = -0.049 * NISSAN_SCALE;
+const NISSAN_EXHAUST = { x: 0.405, y: 0.276, z: -2.08, single: true }; // left-side tip only
+const NISSAN_LIGHTS = { x: 0.55, y: 0.72, z: -2.0 };
+
 const LUGS = 28;
 const SPOKE_PAIRS = 5;
 const DEFAULT_BOUNDS = { minX: -235, maxX: 235, minZ: -235, maxZ: 235 };
@@ -295,8 +333,29 @@ type Smoke = ReturnType<typeof createSmoke>;
 /** Tailpipe positions (side +x and -x) and car velocity in world space, used when the car really drives. */
 type Exhaust = { p: THREE.Vector3; n: THREE.Vector3; vx: number; vz: number };
 
-/** Where the smoke comes out in car space (x = 0 means a single centre exhaust). */
-type Pipe = { x: number; y: number; z: number };
+/** Where the smoke comes out in car space. x = 0 is a centre pipe; `single` uses only the signed x side. */
+type Pipe = { x: number; y: number; z: number; single?: boolean };
+
+type CarConfig = { wheelR: number; trackX: number; exhaust: Pipe };
+
+function carConfig(model: CarModel): CarConfig {
+  switch (model) {
+    case "r17":
+      return { wheelR: R17_WHEEL_R, trackX: R17_WHEEL_X, exhaust: R17_EXHAUST };
+    case "sf90":
+      return { wheelR: SF90_WHEEL_R, trackX: SF90_WHEEL_X, exhaust: SF90_EXHAUST };
+    case "porsche":
+      return { wheelR: PORSCHE_WHEEL_R, trackX: PORSCHE_WHEEL_X, exhaust: PORSCHE_EXHAUST };
+    case "ferrari":
+      return { wheelR: FERRARI_WHEEL_R, trackX: FERRARI_WHEEL_X, exhaust: FERRARI_EXHAUST };
+    case "corvette":
+      return { wheelR: CORVETTE_WHEEL_R, trackX: CORVETTE_WHEEL_X, exhaust: CORVETTE_EXHAUST };
+    case "nissan":
+      return { wheelR: NISSAN_WHEEL_R, trackX: NISSAN_WHEEL_X, exhaust: NISSAN_EXHAUST };
+    default:
+      return { wheelR: WHEEL_R, trackX: WHEEL_X, exhaust: { x: EXHAUST_X, y: EXHAUST_Y, z: EXHAUST_Z } };
+  }
+}
 
 function spawnPuff(sm: Smoke, speed: number, throttle: number, pipe: Pipe, ex?: Exhaust) {
   const i = sm.head;
@@ -311,12 +370,13 @@ function spawnPuff(sm: Smoke, speed: number, throttle: number, pipe: Pipe, ex?: 
     sm.vel[i * 3 + 1] = 0.35 + Math.random() * 0.45;
     sm.vel[i * 3 + 2] = ex.vz * 0.25 + (Math.random() - 0.5) * 0.4;
   } else {
-    pos.setXYZ(i, side * pipe.x + (Math.random() - 0.5) * 0.05, pipe.y, pipe.z);
+    const px = pipe.single ? pipe.x : side * pipe.x;
+    pos.setXYZ(i, px + (Math.random() - 0.5) * 0.05, pipe.y, pipe.z);
 
     // car stays in place: air rushes past it, blowing the smoke backward (none is spawned when reversing)
     const dir = -1;
     const flow = Math.abs(speed) * 0.8 + 1.0;
-    sm.vel[i * 3] = (pipe.x === 0 ? 0 : side * 0.12) + (Math.random() - 0.5) * 0.35; // a single centre pipe must not split into two streams
+    sm.vel[i * 3] = (pipe.single || pipe.x === 0 ? 0 : side * 0.12) + (Math.random() - 0.5) * 0.35; // centre and single-side pipes must not split into two streams
     sm.vel[i * 3 + 1] = 0.35 + Math.random() * 0.45;
     sm.vel[i * 3 + 2] = dir * flow * (0.8 + Math.random() * 0.4);
   }
@@ -637,6 +697,141 @@ function Sf90Body({
   return <primitive object={root} />;
 }
 
+/* ---------- low-poly Sketchfab car bodies ---------- */
+
+type WheelRig = {
+  spinGroups: MutableRefObject<THREE.Group[]>;
+  steerPivots: MutableRefObject<THREE.Group[]>;
+  cast: boolean;
+};
+
+/** Loads a GLB whose four wheel nodes are already named Wheel_FL/FR/RL/RR, and turns the front pair into steering pivots. */
+function SimpleCarBody({
+  url,
+  scale,
+  zShift,
+  yShift = 0,
+  spinGroups,
+  steerPivots,
+  cast,
+}: WheelRig & { url: string; scale: number; zShift: number; yShift?: number }) {
+  const gltf = useGLTF(url);
+  const root = useMemo(() => {
+    const r = gltf.scene.clone(true);
+    r.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) m.castShadow = cast;
+    });
+    return r;
+  }, [gltf, cast]);
+
+  useLayoutEffect(() => {
+    const get = (n: string) => root.getObjectByName(n) as THREE.Group | null;
+    const wheels = [get("Wheel_FL"), get("Wheel_FR"), get("Wheel_RL"), get("Wheel_RR")];
+    const pivots: (THREE.Group | null)[] = wheels.map((wheel) => {
+      if (!wheel) return null;
+      root.updateWorldMatrix(true, true);
+      const box = new THREE.Box3().setFromObject(wheel);
+      const center = box.getCenter(new THREE.Vector3());
+      root.worldToLocal(center);
+      const pivot = new THREE.Group();
+      pivot.position.copy(center);
+      root.add(pivot);
+      pivot.attach(wheel);
+      return pivot;
+    });
+    spinGroups.current = wheels.filter(Boolean) as THREE.Group[];
+    steerPivots.current = [pivots[0], pivots[1]].filter(Boolean) as THREE.Group[];
+  }, [root, spinGroups, steerPivots]);
+
+  return (
+    <group position={[0, yShift, zShift]} scale={scale}>
+      <primitive object={root} />
+    </group>
+  );
+}
+
+/* Nissan wheel assemblies: the Sketchfab export leaves the rim, tyre and brake parts as separate siblings. */
+const NISSAN_WHEELS: {
+  spin: string[];
+  staticParts: string[];
+  center: string;
+  front: boolean;
+}[] = [
+  {
+    spin: ["Circle002", "Plane", "Cylinder001", "Rear_Left_Tire001"],
+    staticParts: ["Plane005"],
+    center: "Rear_Left_Tire001",
+    front: true,
+  },
+  {
+    spin: ["Circle005", "Plane021", "Cylinder006", "Front_Right_Tire"],
+    staticParts: ["Plane011"],
+    center: "Front_Right_Tire",
+    front: true,
+  },
+  {
+    spin: ["Circle003", "Plane012", "Cylinder002", "Rear_Left_Tire"],
+    staticParts: ["Plane003"],
+    center: "Rear_Left_Tire",
+    front: false,
+  },
+  {
+    spin: ["Circle004", "Plane013", "Cylinder005", "Rear_Right_Tire"],
+    staticParts: ["Plane006"],
+    center: "Rear_Right_Tire",
+    front: false,
+  },
+];
+
+function NissanBody({ spinGroups, steerPivots, cast }: WheelRig) {
+  const gltf = useGLTF(NISSAN_URL);
+  const root = useMemo(() => {
+    const r = gltf.scene.clone(true);
+    r.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) m.castShadow = cast;
+    });
+    return r;
+  }, [gltf, cast]);
+
+  useLayoutEffect(() => {
+    const spins: THREE.Group[] = [];
+    const steers: THREE.Group[] = [];
+    for (const wheel of NISSAN_WHEELS) {
+      root.updateWorldMatrix(true, true);
+      const tire = root.getObjectByName(wheel.center);
+      if (!tire) continue;
+      const box = new THREE.Box3().setFromObject(tire);
+      const center = box.getCenter(new THREE.Vector3());
+      root.worldToLocal(center);
+      const pivot = new THREE.Group();
+      pivot.position.copy(center);
+      root.add(pivot);
+      const spin = new THREE.Group();
+      pivot.add(spin);
+      for (const name of wheel.spin) {
+        const part = root.getObjectByName(name);
+        if (part) spin.attach(part);
+      }
+      for (const name of wheel.staticParts) {
+        const part = root.getObjectByName(name);
+        if (part) pivot.attach(part);
+      }
+      spins.push(spin);
+      if (wheel.front) steers.push(pivot);
+    }
+    spinGroups.current = spins;
+    steerPivots.current = steers;
+  }, [root, spinGroups, steerPivots]);
+
+  return (
+    <group position={[0, NISSAN_Y_SHIFT, NISSAN_Z_SHIFT]} scale={NISSAN_SCALE}>
+      <primitive object={root} />
+    </group>
+  );
+}
+
 let redGlowTexCache: THREE.CanvasTexture | null = null;
 
 function redGlowTexture() {
@@ -655,8 +850,8 @@ function redGlowTexture() {
   return redGlowTexCache;
 }
 
-/** One small red dot light at the back (instead of light bars) with a soft halo. It flares up when braking or reversing, like the other tail lights. */
-function RearDot({ mats, y, z }: { mats: Mats; y: number; z: number }) {
+/** One small red tail light with a soft halo. It flares up when braking or reversing, like the other tail lights. */
+function RearLight({ mats, x, y, z }: { mats: Mats; x: number; y: number; z: number }) {
   const halo = useRef<THREE.Sprite>(null);
   const glow = useMemo(() => redGlowTexture(), []);
 
@@ -672,19 +867,34 @@ function RearDot({ mats, y, z }: { mats: Mats; y: number; z: number }) {
 
   return (
     <>
-      <mesh position={[0, y, z]} material={mats.tail}>
+      <mesh position={[x, y, z]} material={mats.tail}>
         <sphereGeometry args={[0.045, 16, 12]} />
       </mesh>
-      <sprite ref={halo} position={[0, y, z - 0.03]} scale={[0.28, 0.28, 1]}>
+      <sprite ref={halo} position={[x, y, z - 0.03]} scale={[0.28, 0.28, 1]}>
         <spriteMaterial map={glow} transparent depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} opacity={0.35} />
       </sprite>
     </>
   );
 }
 
+/** Two tail lights on the sides of the rear (the cars have paired lights, not a centre dot). */
+function RearLights({ mats, x, y, z }: { mats: Mats; x: number; y: number; z: number }) {
+  return (
+    <>
+      <RearLight mats={mats} x={-x} y={y} z={z} />
+      <RearLight mats={mats} x={x} y={y} z={z} />
+    </>
+  );
+}
+
+/** One centre tail light for cars with a single central rear lamp. */
+function RearDot({ mats, y, z }: { mats: Mats; y: number; z: number }) {
+  return <RearLight mats={mats} x={0} y={y} z={z} />;
+}
+
 /* ---------- car ---------- */
 
-export default function ToyCarSmoke({
+export default function FolioCar({
   color = "#8d9196",
   keyboard = true,
   input,
@@ -704,15 +914,25 @@ export default function ToyCarSmoke({
   headlights = false,
   beam = 1,
   ...groupProps
-}: ToyCarSmokeProps) {
+}: FolioCarProps) {
+  const toy = model === "toy";
   const r17 = model === "r17";
   const sf90 = model === "sf90";
-  const wheelR = sf90 ? SF90_WHEEL_R : r17 ? R17_WHEEL_R : WHEEL_R;
-  const trackX = sf90 ? SF90_WHEEL_X : r17 ? R17_WHEEL_X : WHEEL_X;
-  const exX = sf90 ? SF90_EXHAUST.x : r17 ? R17_EXHAUST.x : EXHAUST_X;
-  const exY = sf90 ? SF90_EXHAUST.y : r17 ? R17_EXHAUST.y : EXHAUST_Y;
-  const exZ = sf90 ? SF90_EXHAUST.z : r17 ? R17_EXHAUST.z : EXHAUST_Z;
-  const pipe = useMemo<Pipe>(() => ({ x: exX, y: exY, z: exZ }), [exX, exY, exZ]);
+  const nissan = model === "nissan";
+  const porsche = model === "porsche";
+  const ferrari = model === "ferrari";
+  const corvette = model === "corvette";
+  const config = carConfig(model);
+  const wheelR = config.wheelR;
+  const trackX = config.trackX;
+  const exX = config.exhaust.x;
+  const exY = config.exhaust.y;
+  const exZ = config.exhaust.z;
+  const singleExhaust = config.exhaust.single;
+  const pipe = useMemo<Pipe>(
+    () => ({ x: exX * carScale, y: exY * carScale, z: exZ * carScale, single: singleExhaust }),
+    [exX, exY, exZ, carScale, singleExhaust]
+  );
   const carRef = useRef<THREE.Group>(null);
   const spinGroups = useRef<THREE.Group[]>([]);
   const steerPivots = useRef<THREE.Group[]>([]);
@@ -947,7 +1167,7 @@ export default function ToyCarSmoke({
         g.rotation.set(w.pitch, w.yaw, w.roll, "YXZ");
         g.updateMatrixWorld();
         exhaust.p.set(exX * carScale, exY * carScale, exZ * carScale);
-        exhaust.n.set(-exX * carScale, exY * carScale, exZ * carScale);
+        exhaust.n.set((singleExhaust ? exX : -exX) * carScale, exY * carScale, exZ * carScale);
         g.localToWorld(exhaust.p);
         g.localToWorld(exhaust.n);
         const outer = outerRef.current;
@@ -1017,7 +1237,60 @@ export default function ToyCarSmoke({
             </group>
           </>
         )}
-        {!r17 && !sf90 && (
+        {porsche && (
+          <>
+            <Suspense fallback={null}>
+              <SimpleCarBody
+                url={PORSCHE_URL}
+                scale={PORSCHE_SCALE}
+                zShift={PORSCHE_Z_SHIFT}
+                spinGroups={spinGroups}
+                steerPivots={steerPivots}
+                cast={driving}
+              />
+            </Suspense>
+            <RearLights mats={mats} x={PORSCHE_LIGHTS.x} y={PORSCHE_LIGHTS.y} z={PORSCHE_LIGHTS.z} />
+          </>
+        )}
+        {ferrari && (
+          <>
+            <Suspense fallback={null}>
+              <SimpleCarBody
+                url={FERRARI_URL}
+                scale={FERRARI_SCALE}
+                zShift={FERRARI_Z_SHIFT}
+                spinGroups={spinGroups}
+                steerPivots={steerPivots}
+                cast={driving}
+              />
+            </Suspense>
+            <RearLights mats={mats} x={FERRARI_LIGHTS.x} y={FERRARI_LIGHTS.y} z={FERRARI_LIGHTS.z} />
+          </>
+        )}
+        {corvette && (
+          <>
+            <Suspense fallback={null}>
+              <SimpleCarBody
+                url={CORVETTE_URL}
+                scale={CORVETTE_SCALE}
+                zShift={CORVETTE_Z_SHIFT}
+                spinGroups={spinGroups}
+                steerPivots={steerPivots}
+                cast={driving}
+              />
+            </Suspense>
+            <RearLights mats={mats} x={CORVETTE_LIGHTS.x} y={CORVETTE_LIGHTS.y} z={CORVETTE_LIGHTS.z} />
+          </>
+        )}
+        {nissan && (
+          <>
+            <Suspense fallback={null}>
+              <NissanBody spinGroups={spinGroups} steerPivots={steerPivots} cast={driving} />
+            </Suspense>
+            <RearLights mats={mats} x={NISSAN_LIGHTS.x} y={NISSAN_LIGHTS.y} z={NISSAN_LIGHTS.z} />
+          </>
+        )}
+        {toy && (
         <>
         {/* shell */}
         <mesh geometry={geo.body} material={mats.paint} />

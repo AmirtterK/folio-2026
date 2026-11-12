@@ -105,6 +105,7 @@ const CLEAR: { x: number; z: number; r: number }[] = [
   ...RIDGES.map((r) => ({ x: r.x + Math.cos(r.a) * r.len * 0.5, z: r.z + Math.sin(r.a) * r.len * 0.5, r: r.len * 0.5 + 8 })),
   ...WHOOPS.map((r) => ({ x: r.x + Math.cos(r.a) * r.n * r.period * 0.5, z: r.z + Math.sin(r.a) * r.n * r.period * 0.5, r: r.n * r.period * 0.5 + 8 })),
   { x: TROPHY_POS.x, z: TROPHY_POS.z, r: 14 },
+  { x: 5, z: 57, r: 22 },
 ];
 
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
@@ -530,11 +531,7 @@ function buildTerrain(): TerrainData {
   /* golden achievement trophy pedestal landmark */
   solids.push({ x: TROPHY_POS.x, z: TROPHY_POS.z, r: 0.75 });
   // Logo obstacles at track center
-  // Logo obstacles on the main straight
-  solids.push({ x: 15, z: 57, r: 0.3 });
-  solids.push({ x: 5, z: 57, r: 0.3 });
-  solids.push({ x: -5, z: 57, r: 0.3 });
-  solids.push({ x: -15, z: 57, r: 0.3 });
+  // Logo obstacles on the main straight (no collision solid: they are pushable)
 
   /* holographic chess knight landmark */
   solids.push({ x: KNIGHT_POS.x, z: KNIGHT_POS.z, r: 0.9 });

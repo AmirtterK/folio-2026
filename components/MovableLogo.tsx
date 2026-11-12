@@ -4,9 +4,7 @@ import { useRef, useEffect } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import RAPIER from "@dimforge/rapier3d-compat";
-import type { MutableRefObject } from "react";
 import type { ReactNode } from "react";
-import type { CarPose } from "@/components/FolioCar";
 import { groundHeight } from "@/components/Terrain";
 import { usePhysics } from "@/components/PhysicsProvider";
 
@@ -24,7 +22,10 @@ export default function MovableLogo({ position, children }: MovableLogoProps) {
   useEffect(() => {
     if (!world) return;
     const body = world.createRigidBody(
-      RAPIER.RigidBodyDesc.dynamic().setTranslation(position[0], groundHeight(position[0], position[2]) + 2.0, position[2])
+      RAPIER.RigidBodyDesc.dynamic()
+        .setTranslation(position[0], groundHeight(position[0], position[2]) + 2.0, position[2])
+        .setLinearDamping(2.5)
+        .setAngularDamping(2.0)
     );
     world.createCollider(RAPIER.ColliderDesc.cuboid(1.5, 1.5, 0.5), body);
     bodyRef.current = body;

@@ -109,7 +109,7 @@ function createKeycapTexture(): THREE.CanvasTexture {
   return tex;
 }
 
-/** A holographic tap gesture: a pointing hand with ripple rings and a TAP label. */
+/** A holographic tap gesture: a circular pulse ring with a TAP label beside it. */
 function createTapTexture(): THREE.CanvasTexture {
   const size = 512;
   const canvas = document.createElement("canvas");
@@ -122,74 +122,40 @@ function createTapTexture(): THREE.CanvasTexture {
   ctx.shadowColor = `rgba(${HOLO_RGB},0.9)`;
   ctx.shadowBlur = 26;
 
-  // Ripple rings under the fingertip.
+  const cx = 150;
+  const cy = 256;
+
+  // Concentric pulsing rings.
   ctx.strokeStyle = HOLO_COLOR;
-  ctx.lineWidth = 10;
-  for (const r of [54, 84]) {
+  ctx.lineWidth = 12;
+  for (const r of [52, 86, 120]) {
     ctx.beginPath();
-    ctx.arc(256, 408, r, Math.PI * 0.15, Math.PI * 0.85);
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.stroke();
   }
 
-  // Hand silhouette: palm plus an index finger pointing down at the tap point.
-  ctx.fillStyle = "rgba(94,200,255,0.16)";
+  // Filled core dot.
+  ctx.fillStyle = "rgba(94,200,255,0.22)";
+  ctx.beginPath();
+  ctx.arc(cx, cy, 34, 0, Math.PI * 2);
+  ctx.fill();
   ctx.strokeStyle = HOLO_COLOR;
-  ctx.lineWidth = 12;
-
-  ctx.beginPath();
-  ctx.moveTo(228, 250);
-  ctx.lineTo(228, 386);
-  ctx.quadraticCurveTo(228, 408, 250, 408);
-  ctx.lineTo(262, 408);
-  ctx.quadraticCurveTo(284, 408, 284, 386);
-  ctx.lineTo(284, 250);
-  ctx.closePath();
-  ctx.fill();
+  ctx.lineWidth = 8;
   ctx.stroke();
 
-  ctx.beginPath();
-  ctx.moveTo(178, 140);
-  ctx.quadraticCurveTo(178, 110, 208, 110);
-  ctx.lineTo(304, 110);
-  ctx.quadraticCurveTo(334, 110, 334, 140);
-  ctx.lineTo(334, 238);
-  ctx.quadraticCurveTo(334, 268, 304, 268);
-  ctx.lineTo(208, 268);
-  ctx.quadraticCurveTo(178, 268, 178, 238);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(178, 178);
-  ctx.quadraticCurveTo(142, 178, 142, 212);
-  ctx.quadraticCurveTo(142, 240, 176, 240);
-  ctx.stroke();
-
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.moveTo(210, 250);
-  ctx.lineTo(210, 214);
-  ctx.moveTo(256, 250);
-  ctx.lineTo(256, 214);
-  ctx.moveTo(302, 250);
-  ctx.lineTo(302, 214);
-  ctx.stroke();
-
-  // TAP label
+  // TAP label beside the pulse.
   ctx.shadowBlur = 0;
   ctx.fillStyle = "#eefdff";
-  ctx.font = "700 54px system-ui, -apple-system, 'Segoe UI', sans-serif";
-  ctx.textAlign = "center";
+  ctx.font = "700 74px system-ui, -apple-system, 'Segoe UI', sans-serif";
+  ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillText("TAP", 256, 62);
+  ctx.fillText("TAP", 290, 256);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
   return tex;
 }
-
 function makeKeycapGeometry(): THREE.ExtrudeGeometry {
   const W = KEYCAP_W;
   const T = KEYCAP_TOTAL_H;

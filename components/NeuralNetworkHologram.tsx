@@ -301,7 +301,7 @@ export default function NeuralNetworkHologram({
   const holo = { hologramColor: HOLO_COLOR, hologramBrightness: 1.3, scanlineSize: 8, enableAdditive: night, ...hologram };
 
   return (
-    <group position={[NEURAL_POS.x, y, NEURAL_POS.z]}>
+    <group position={[NEURAL_POS.x, y, NEURAL_POS.z]} onClick={(e) => { if (isNear && !inspecting) { e.stopPropagation(); onInspectToggle(true); } }}>
       <HologramBase night={night} size={LANDMARK_BASE_SIZE} ringEnd={4.2} lightY={1.9}>
         <group ref={spinRef} position={[0, NET_Y, 0]} scale={NET_SCALE}>
           <mesh geometry={net.nodesGeo}>

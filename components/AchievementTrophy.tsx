@@ -423,7 +423,7 @@ export default function AchievementTrophy({
   const holo = { hologramColor: HOLO, hologramBrightness: 1.3, scanlineSize: 8, enableAdditive: night };
 
   return (
-    <group position={[TROPHY_POS.x, y, TROPHY_POS.z]}>
+    <group position={[TROPHY_POS.x, y, TROPHY_POS.z]} onClick={(e) => { if (isNear && !inspecting) { e.stopPropagation(); onInspectToggle(true); } }}>
       {/* Shared round hologram projector: radar pings on the road, blue light and a faint beam, like the other landmarks */}
       <HologramBase night={night} size={LANDMARK_BASE_SIZE} ringEnd={4.4} lightY={2.2} beamHeight={2.4}>
         {/* The trophy, now a hologram too: one merged mesh turning slowly on the projector dish */}

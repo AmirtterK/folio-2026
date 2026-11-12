@@ -148,7 +148,7 @@ export default function ChessKnight({
   const holo = { hologramColor: HOLO_COLOR, hologramBrightness: 1.3, scanlineSize: 8, enableAdditive: night, ...hologram };
 
   return (
-    <group position={[KNIGHT_POS.x, y, KNIGHT_POS.z]}>
+    <group position={[KNIGHT_POS.x, y, KNIGHT_POS.z]} onClick={(e) => { if (isNear && !inspecting) { e.stopPropagation(); onInspectToggle(true); } }}>
       <HologramBase night={night} size={LANDMARK_BASE_SIZE} lightY={1.45}>
         {/* the knight, turning slowly */}
         <group ref={spinRef} scale={KNIGHT_SCALE}>

@@ -47,9 +47,9 @@ const GPU_TIMEOUT_MS = 10000;             // if the GPU delegate has not come up
 const CPU_TIMEOUT_MS = 30000;             // give up with an error if the CPU start takes longer than this
 
 const LABEL: Record<Gesture, string> = {
-  forward: "✋ Go",
-  brake: "✊ Brake",
-  reverse: "✌️ Reverse",
+  forward: "Go",
+  brake: "Brake",
+  reverse: "Reverse",
   coast: "Coasting",
 };
 
@@ -298,7 +298,7 @@ export default function HandGestures({
         k.left = steer < 0 ? -steer : 0;
         k.right = steer > 0 ? steer : 0;
 
-        const arrow = steer < -0.1 ? "◀" : steer > 0.1 ? "▶" : "•";
+        const arrow = steer < -0.1 ? "<" : steer > 0.1 ? ">" : "-";
         setLabel(`${LABEL[stable]}  ${arrow} ${Math.round(Math.abs(steer) * 100)}%`);
 
         if (g) {

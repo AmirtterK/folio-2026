@@ -79,12 +79,26 @@ export type FolioCarProps = {
   headlights?: boolean;
   /** How visible the light cone is (1 at night, lower in daylight). */
   beam?: number;
+  /** Called once the selected car body has finished loading and is mounted in the scene. */
+  onReady?: () => void;
 } & Omit<ThreeElements["group"], "ref">;
 
 const KEY_MAP: Record<string, keyof CarInput> = {
   KeyW: "fwd", ArrowUp: "fwd", KeyS: "back", ArrowDown: "back",
   KeyA: "left", ArrowLeft: "left", KeyD: "right", ArrowRight: "right", Space: "brake",
 };
+
+/**
+ * Signals that the async car body above it has mounted.
+ * It must live inside the same Suspense boundary as the GLB body, so it only
+ * runs after useGLTF has resolved and the car is actually in the scene.
+ */
+function CarReady({ onReady }: { onReady?: () => void }) {
+  useEffect(() => {
+    onReady?.();
+  }, [onReady]);
+  return null;
+}
 
 const WHEEL_R = 0.45;
 const WHEEL_X = 0.86;
@@ -97,6 +111,10 @@ const R17_WHEEL_X = 0.698;
 const R17_Z_SHIFT = -0.04; // the GLB's axles sit at z = 1.24 / -1.16; shift so they are at +-1.2 like the toy car
 const R17_EXHAUST = { x: 0.45, y: 0.32, z: -2.1 };
 const R17_LAMP = { x: 0.54, y: 0.6, z: 1.92 };
+
+// Kick off the default car download as soon as this module is evaluated, so it
+// is usually already cached by the time the Canvas mounts.
+useGLTF.preload(R17_URL);
 
 /* Ferrari SF90 (scripts/build-sf90.mjs): same wheelbase as the toy car, small F1 wheels, one centre exhaust. Credit: "Ferrari F1 2019" by vecarz, CC-BY-4.0. */
 const SF90_URL = "/models/sf90.glb";
@@ -913,6 +931,7 @@ export default function FolioCar({
   model = "toy",
   headlights = false,
   beam = 1,
+  onReady,
   ...groupProps
 }: FolioCarProps) {
   const toy = model === "toy";
@@ -1220,6 +1239,7 @@ export default function FolioCar({
           <>
             <Suspense fallback={null}>
               <R17Body mats={mats} spinGroups={spinGroups} steerPivots={steerPivots} cast={driving} />
+              <CarReady onReady={onReady} />
             </Suspense>
             {[-1, 1].map((s) => (
               <HeadlightSide key={s} x={s * R17_LAMP.x} y={R17_LAMP.y} z={R17_LAMP.z} level={lightLevel} beam={beam} />
@@ -1232,6 +1252,7 @@ export default function FolioCar({
             <group scale={SF90_SCALE}>
               <Suspense fallback={null}>
                 <Sf90Body spinGroups={spinGroups} steerPivots={steerPivots} cast={driving} />
+                <CarReady onReady={onReady} />
               </Suspense>
               <RearDot mats={mats} y={SF90_DOT.y} z={SF90_DOT.z} />
             </group>
@@ -1248,6 +1269,7 @@ export default function FolioCar({
                 steerPivots={steerPivots}
                 cast={driving}
               />
+              <CarReady onReady={onReady} />
             </Suspense>
             <RearLights mats={mats} x={PORSCHE_LIGHTS.x} y={PORSCHE_LIGHTS.y} z={PORSCHE_LIGHTS.z} />
           </>
@@ -1263,6 +1285,7 @@ export default function FolioCar({
                 steerPivots={steerPivots}
                 cast={driving}
               />
+              <CarReady onReady={onReady} />
             </Suspense>
             <RearLights mats={mats} x={FERRARI_LIGHTS.x} y={FERRARI_LIGHTS.y} z={FERRARI_LIGHTS.z} />
           </>
@@ -1278,6 +1301,7 @@ export default function FolioCar({
                 steerPivots={steerPivots}
                 cast={driving}
               />
+              <CarReady onReady={onReady} />
             </Suspense>
             <RearLights mats={mats} x={CORVETTE_LIGHTS.x} y={CORVETTE_LIGHTS.y} z={CORVETTE_LIGHTS.z} />
           </>
@@ -1286,12 +1310,14 @@ export default function FolioCar({
           <>
             <Suspense fallback={null}>
               <NissanBody spinGroups={spinGroups} steerPivots={steerPivots} cast={driving} />
+              <CarReady onReady={onReady} />
             </Suspense>
             <RearLights mats={mats} x={NISSAN_LIGHTS.x} y={NISSAN_LIGHTS.y} z={NISSAN_LIGHTS.z} />
           </>
         )}
         {toy && (
         <>
+        <CarReady onReady={onReady} />
         {/* shell */}
         <mesh geometry={geo.body} material={mats.paint} />
         <mesh geometry={geo.glass} material={mats.glass} />

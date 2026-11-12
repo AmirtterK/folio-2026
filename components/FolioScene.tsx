@@ -33,23 +33,6 @@ const SCENERY_RADIUS = 100;
 
 /* ---------- Loading Overlay ---------- */
 
-function SceneLoader({ onReady }: { onReady: () => void }) {
-  const called = useRef(false);
-  const frameCount = useRef(0);
-
-  // Once WebGL has compiled shaders and rendered the initial frames, signal scene ready.
-  // This avoids any hooks that touch THREE.DefaultLoadingManager during render.
-  useFrame(() => {
-    frameCount.current++;
-    if (!called.current && frameCount.current >= 4) {
-      called.current = true;
-      onReady();
-    }
-  });
-
-  return null;
-}
-
 function LoadingScreen({ progress, visible }: { progress: number; visible: boolean }) {
   const r = 54;
   const stroke = 5;
@@ -58,6 +41,11 @@ function LoadingScreen({ progress, visible }: { progress: number; visible: boole
 
   return (
     <div
+      className="folio-loader"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading"
+      data-progress={Math.round(progress)}
       style={{
         position: "fixed",
         inset: 0,
@@ -101,7 +89,7 @@ function LoadingScreen({ progress, visible }: { progress: number; visible: boole
           letterSpacing: 0.5,
         }}
       >
-        {Math.round(progress)}
+        {Math.round(progress)}%
       </span>
     </div>
   );
@@ -265,7 +253,7 @@ export default function FolioScene() {
   inspectingTrophyRef.current = inspectingTrophy;
 
   const emptyInput = useRef<CarInput>({ fwd: 0, back: 0, left: 0, right: 0, brake: 1 });
-  // Free-cam movement keys (WASD) â€” kept separate from the car's input so arrows can still drive
+  // Free-cam movement keys (WASD) -- kept separate from the car's input so arrows can still drive
   const camKeys = useRef<CarInput>({ fwd: 0, back: 0, left: 0, right: 0, brake: 0 });
 
   const handleTrophyNearChange = useCallback((near: boolean) => {
@@ -291,8 +279,10 @@ export default function FolioScene() {
 
   /* ---- Loading state ---- */
   const [sceneReady, setSceneReady] = useState(false);
+  const [carReady, setCarReady] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
   const [canvasDeferred, setCanvasDeferred] = useState(false);
+  const readySignaled = useRef(false);
 
   // Defer canvas mount so the loading screen paints first
   useEffect(() => {
@@ -306,26 +296,29 @@ export default function FolioScene() {
     return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
   }, []);
 
-  // Synthetic progress: terrain build is synchronous and heavy, so we simulate
-  // progress from 0â†’70% over 2.5s while buildTerrain() runs, then drei's
-  // useProgress fills in the final 70â†’100% as textures upload.
+  // Synthetic progress while the scene builds: creep up to 92% quickly, then the
+  // car signals readiness and we jump to 100%.
   useEffect(() => {
     if (sceneReady) { setLoadProgress(100); return; }
-    if (!canvasDeferred) return;
+    if (!canvasDeferred || carReady) return;
     let t = 0;
     const interval = setInterval(() => {
       t += 80;
-      // Ease-out curve capping at 70%
-      const p = 70 * (1 - Math.exp(-t / 900));
-      setLoadProgress(p);
+      // Ease-out curve capping at 92% until the car is actually ready
+      const p = 92 * (1 - Math.exp(-t / 450));
+      setLoadProgress((prev) => Math.max(prev, Math.min(92, p)));
     }, 80);
     return () => clearInterval(interval);
-  }, [canvasDeferred, sceneReady]);
+  }, [canvasDeferred, carReady, sceneReady]);
 
+  // Called by FolioCar only after the GLB body has mounted in the scene.
   const handleSceneReady = useCallback(() => {
+    setCarReady(true);
     setLoadProgress(100);
-    // Short delay to let the bar reach 100% visually before fading
-    setTimeout(() => setSceneReady(true), 400);
+    if (readySignaled.current) return;
+    readySignaled.current = true;
+    // Let the ring visibly reach 100% before fading the overlay out.
+    setTimeout(() => setSceneReady(true), 350);
   }, []);
 
   const set = (k: keyof CarInput, v: 0 | 1) => {
@@ -534,7 +527,6 @@ export default function FolioScene() {
               : { position: [6, 3.5, 7], fov: 40 }
           }
         >
-          <SceneLoader onReady={handleSceneReady} />
           {view === "track" ? (
             <>
               <color attach="background" args={[night ? "#0a1238" : "#cbe2f2"]} />
@@ -595,6 +587,7 @@ export default function FolioScene() {
                 carScale={0.75075}
                 model={carModel}
                 headlights={night}
+                onReady={handleSceneReady}
               />
               <FolioTopDownCam
                 pose={pose}
@@ -611,12 +604,12 @@ export default function FolioScene() {
               <ambientLight intensity={0.8} />
               <hemisphereLight args={["#ffffff", "#555555", 0.5]} />
               <directionalLight position={[4, 7, 5]} intensity={1.2} />
-              <FolioCar key={carModel} color={color} keyboard={false} input={input} onSpeed={onSpeed} smoke={smokeOn} carScale={1.155} model={carModel} />
+              <FolioCar key={carModel} color={color} keyboard={false} input={input} onSpeed={onSpeed} smoke={smokeOn} carScale={1.155} model={carModel} onReady={handleSceneReady} />
               <OrbitControls target={[0, 1, 0]} />
             </>
           )}
         </Canvas>
-      ) : (
+      ) : is3d ? null : (
         <iframe title="Classic car" src="/classic-car.html" style={{ width: "100%", height: "100%", border: 0 }} />
       )}
 
@@ -638,8 +631,8 @@ export default function FolioScene() {
           boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
         }}
       >
-        {tab("track", "ðŸ Racing Track")}
-        {tab("smoke", "ðŸŽï¸ Detailed Car")}
+        {tab("track", "Racing Track")}
+        {tab("smoke", "Detailed Car")}
         {tab("html", "Classic (HTML)")}
 
         {is3d && (
@@ -789,7 +782,7 @@ export default function FolioScene() {
                 boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
               }}
             >
-              🗺️ Map
+              Map
             </button>
 
             <button
@@ -813,7 +806,7 @@ export default function FolioScene() {
                 boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
               }}
             >
-              {freeCam ? "âœ• Exit free cam [F]" : "ðŸŽ¥ Free cam [F]"}
+              {freeCam ? "Exit free cam [F]" : "Free cam [F]"}
             </button>
 
             <button
@@ -834,7 +827,7 @@ export default function FolioScene() {
                 boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
               }}
             >
-              âŸ² Reset [R]
+              Reset [R]
             </button>
           </>
         )}
@@ -899,12 +892,12 @@ export default function FolioScene() {
             }}
           >
             <div className="folio-touch-group" style={{ display: "flex", gap: 10, pointerEvents: "auto" }}>
-              {hold("left", "â—€", "Steer left")}
-              {hold("right", "â–¶", "Steer right")}
+              {hold("left", "\u25C0", "Steer left")}
+              {hold("right", "\u25B6", "Steer right")}
             </div>
             <div className="folio-touch-group" style={{ display: "flex", gap: 10, pointerEvents: "auto" }}>
-              {hold("back", "â–¼", "Reverse")}
-              {hold("fwd", "â–²", "Forward")}
+              {hold("back", "\u25BC", "Reverse")}
+              {hold("fwd", "\u25B2", "Forward")}
             </div>
           </div>
         </>
@@ -926,12 +919,12 @@ export default function FolioScene() {
       {view === "track" && (
         <div className="folio-hint" style={night ? { ...HINT, color: "#c9d1ff", textShadow: "0 1px 3px rgba(0,0,0,0.8)" } : HINT}>
           {freeCam
-            ? "FREE CAM â€¢ WASD to move camera â€¢ Arrows to drive â€¢ Drag to orbit â€¢ Right-drag to pan â€¢ Scroll to zoom â€¢ F or Esc to go back"
-            : "WASD or Arrow Keys to steer â€¢ Space to brake â€¢ Scroll wheel to zoom â€¢ M for map â€¢ R to reset â€¢ F for free cam"}
+            ? "FREE CAM | WASD to move camera | Arrows to drive | Drag to orbit | Right-drag to pan | Scroll to zoom | F or Esc to go back"
+            : "WASD or Arrow Keys to steer | Space to brake | Scroll wheel to zoom | M for map | R to reset | F for free cam"}
         </div>
       )}
 
-      {/* Loading overlay â€” covers everything until the scene is built */}
+      {/* Loading overlay -- covers everything until the car is in the scene */}
       <LoadingScreen progress={loadProgress} visible={!sceneReady} />
 
       {/* Global CSS keyframes and responsive layout for DOM overlays */}

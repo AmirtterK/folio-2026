@@ -27,6 +27,11 @@ import ChessKnight from "@/components/ChessKnight";
 import NeuralNetworkHologram from "@/components/NeuralNetworkHologram";
 import CarLoadingHologram from "@/components/CarLoadingHologram";
 import LogoObstacle from "@/components/LogoObstacle";
+import MovableLogo from "@/components/MovableLogo";
+import { ClaudeCodeLogo } from "@/components/ClaudeCodeLogo";
+import { CodexLogo } from "@/components/CodexLogo";
+import { OpenAILogo } from "@/components/OpenAILogo";
+import { OpenCodeLogo } from "@/components/OpenCodeLogo";
 import { TROPHY_POS, KNIGHT_POS, NEURAL_POS } from "@/components/landmarkConfig";
 
 type View = "track" | "smoke" | "html";
@@ -683,10 +688,18 @@ export default function FolioScene() {
               />
               <MobileTapHandler pose={pose} />
               <CarLoadingHologram pose={pose} visible={!carLoaded} night={night} />
-              <LogoObstacle position={[15, 0, 57]} color="#D97757" label="C" pose={pose} id="claude" velocities={obstacleVelocities} />
-              <LogoObstacle position={[5, 0, 57]} color="#7A9DFF" label="X" pose={pose} id="codex" velocities={obstacleVelocities} />
-              <LogoObstacle position={[-5, 0, 57]} color="#ffffff" label="G" pose={pose} id="chatgpt" velocities={obstacleVelocities} />
-              <LogoObstacle position={[-15, 0, 57]} color="#EEEEEE" label="L" pose={pose} id="lobe" velocities={obstacleVelocities} />
+              <MovableLogo position={[15, 0, 57]} pose={pose} id="claude" velocities={obstacleVelocities}>
+                <ClaudeCodeLogo size={4} />
+              </MovableLogo>
+              <MovableLogo position={[5, 0, 57]} pose={pose} id="codex" velocities={obstacleVelocities}>
+                <CodexLogo size={4} />
+              </MovableLogo>
+              <MovableLogo position={[-5, 0, 57]} pose={pose} id="chatgpt" velocities={obstacleVelocities}>
+                <OpenAILogo size={4} color="#ffffff" />
+              </MovableLogo>
+              <MovableLogo position={[-15, 0, 57]} pose={pose} id="lobe" velocities={obstacleVelocities}>
+                <OpenCodeLogo size={0.5} />
+              </MovableLogo>
               <FolioCar
                 key={`car-${carResetKey}-${carModel}`}
                 color={color}

@@ -644,8 +644,9 @@ export default function FolioScene() {
         <Canvas
           key={view === "track" ? "track" : "lab"}
           shadows
-          dpr={[1, 2]}
-          frameloop={showMinimap ? "never" : "always"}
+          dpr={[1, 1.5]}
+          frameloop="always"
+          performance={{ min: 0.5 }}
           camera={
             view === "track"
               ? { position: [20, 26, 20], fov: 26, near: 0.5, far: 800 }
@@ -742,14 +743,16 @@ export default function FolioScene() {
                 R3FLogos.BashLogo,
                 R3FLogos.PostgreSqlLogo,
                 R3FLogos.SupabaseLogo,
-              ].map((Logo, i) => {
-                const col = i % 8;
-                const row = Math.floor(i / 8);
-                let x = 28 - col * 6.2;
-                let z = 57 + (row - 1) * 5.2;
-                // Bring Supabase and PostgreSQL logos closer together
-                if (i === 24) { x = 18; z = 57 + (3 - 1) * 5.2; } // PostgreSQL
-                if (i === 25) { x = 13.5; z = 57 + (3 - 1) * 5.2; } // Supabase
+              ].map((Logo, i, arr) => {
+                // 3 per row (n%3), last row gets the remainder (2) placed at the end on-road
+                const perRow = 3;
+                const row = Math.floor(i / perRow);
+                const col = i % perRow;
+                const totalRows = Math.ceil(arr.length / perRow);
+                const itemsInRow = row === totalRows - 1 ? arr.length - row * perRow : perRow;
+                const colOffset = col - (itemsInRow - 1) / 2; // centers last row when it has 2
+                const x = 26 - row * 7.2;
+                const z = 57 + colOffset * 3.3;
                 return (
                   <MovableLogo key={i} position={[x, 0, z]}>
                     <Logo size={3} />
@@ -1088,18 +1091,20 @@ export default function FolioScene() {
             }}
           >
             <div className="folio-touch-group" style={{ display: "flex", gap: 10, pointerEvents: "auto" }}>
-              {hold("left", "\u25C0", "Steer left")}
-              {hold("right", "\u25B6", "Steer right")}
+              {hold("fwd", "\u25B2", "Forward")}
+              {hold("back", "\u25BC", "Reverse")}
             </div>
             <div className="folio-touch-group" style={{ display: "flex", gap: 10, pointerEvents: "auto" }}>
-              {hold("back", "\u25BC", "Reverse")}
-              {hold("fwd", "\u25B2", "Forward")}
+              {hold("left", "\u25C0", "Steer left")}
+              {hold("right", "\u25B6", "Steer right")}
             </div>
           </div>
         </>
       )}
 
-      {is3d && gestures && freeCam && (
+      {/* Stays mounted while gestures are on (even if free cam is toggled) so the camera + model are not
+          torn down and reloaded each time. It only moves the camera while free cam's OrbitControls exist. */}
+      {is3d && view === "track" && gestures && (
         <HandGestures controlsRef={orbitControlsRef} enabled={true} />
       )}
 

@@ -1,17 +1,18 @@
-export const TROPHY_POS = {
-  x: 0,
-  z: 20,
+/** Milestones along the main straight (road centre ~ z 56), placed sequentially after each other */
+export const NEURAL_POS = {
+  x: -40,
+  z: 56,
 };
 
-/** Holographic chess knight, on the road along the long straight (cars drive +x here, so yaw PI faces it toward them). */
+/** Holographic chess knight milestone, after neural network */
 export const KNIGHT_POS = {
-  x: 80,
-  z: 28.8,
+  x: -58,
+  z: 56,
   yaw: Math.PI,
 };
 
-/** Holographic neural network, on the road along the main straight (the road centre is at z ~ 56 here). */
-export const NEURAL_POS = {
-  x: -40,
+/** Achievement trophy milestone, after chess knight */
+export const TROPHY_POS = {
+  x: -76,
   z: 56,
 };

@@ -9,7 +9,7 @@ import {
   TRACK_CENTER_Z,
 } from "@/components/RacingTrack";
 
-import { KNIGHT_POS, NEURAL_POS } from "@/components/landmarkConfig";
+import { TROPHY_POS, KNIGHT_POS, NEURAL_POS } from "@/components/landmarkConfig";
 
 // Exact SVG Path extracted directly from the Monza circuit vector layout
 const TRACK_PATH = "M 325.0 258.0 L 313.8 258.0 L 302.7 258.0 L 291.5 258.0 L 280.3 258.0 L 269.1 258.0 L 258.0 258.0 L 246.8 258.0 L 235.6 258.0 L 224.5 258.0 L 213.4 257.0 L 202.2 257.0 L 193.1 251.9 L 182.6 251.1 L 172.0 254.6 L 161.2 257.5 L 150.1 258.0 L 138.9 258.0 L 127.7 257.9 L 116.6 256.9 L 105.8 254.2 L 95.3 250.3 L 85.4 245.1 L 76.9 237.9 L 69.4 229.7 L 63.4 220.3 L 58.7 210.2 L 55.5 199.5 L 53.3 188.5 L 51.3 177.6 L 49.3 166.6 L 47.3 155.6 L 45.5 144.6 L 43.5 133.6 L 41.9 122.5 L 40.3 111.5 L 34.6 102.4 L 27.7 94.3 L 23.9 83.8 L 19.6 73.5 L 15.3 63.2 L 10.8 52.9 L 6.9 42.5 L 4.1 31.7 L 9.3 17.6 L 19.5 13.2 L 30.3 10.7 L 41.3 8.4 L 52.3 6.5 L 63.3 4.7 L 74.4 4.1 L 82.8 11.0 L 89.1 20.2 L 95.2 29.5 L 101.4 38.8 L 107.7 48.1 L 113.9 57.3 L 120.7 66.2 L 127.7 74.9 L 135.2 83.2 L 142.8 91.3 L 150.7 99.2 L 158.9 106.9 L 166.8 114.8 L 174.7 122.6 L 182.8 130.3 L 191.0 138.0 L 199.0 145.7 L 207.2 153.3 L 215.2 161.1 L 223.3 168.7 L 231.6 176.2 L 241.8 180.0 L 253.0 179.3 L 263.7 182.0 L 272.3 189.1 L 282.8 192.4 L 293.9 193.0 L 305.1 193.0 L 316.2 193.0 L 327.3 194.0 L 338.5 194.0 L 349.7 194.0 L 360.8 194.0 L 372.0 194.0 L 383.1 195.0 L 394.3 195.0 L 405.4 195.0 L 416.6 195.0 L 427.8 195.0 L 439.0 195.0 L 450.1 196.0 L 461.2 196.0 L 472.4 196.0 L 483.6 196.0 L 494.6 197.4 L 504.7 201.8 L 511.1 210.7 L 511.4 221.7 L 507.2 232.1 L 500.6 241.0 L 491.0 246.7 L 480.5 250.5 L 469.7 253.1 L 458.7 255.0 L 447.6 256.5 L 436.6 257.9 L 425.5 259.0 L 414.3 259.0 L 403.1 259.0 L 392.0 258.0 L 380.9 258.0 L 369.7 258.0 L 358.5 258.0 L 347.3 258.0 L 336.2 258.0 Z";
@@ -174,8 +174,8 @@ export default function Minimap({ pose, visible, onToggle }: MinimapProps) {
             strokeDasharray="4 4"
           />
 
-          {/* Achievement Trophy Landmark pin in infield */}
-          <g transform={`translate(${(0 / TRACK_SCALE + TRACK_CENTER_X).toFixed(1)}, ${(20 / TRACK_SCALE + TRACK_CENTER_Z).toFixed(1)})`}>
+          {/* Achievement Trophy Landmark pin */}
+          <g transform={`translate(${(TROPHY_POS.x / TRACK_SCALE + TRACK_CENTER_X).toFixed(1)}, ${(TROPHY_POS.z / TRACK_SCALE + TRACK_CENTER_Z).toFixed(1)})`}>
             <text x="0" y="15" fontSize="40" textAnchor="middle" style={{ pointerEvents: "none" }}>🏆</text>
           </g>
 

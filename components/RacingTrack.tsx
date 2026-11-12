@@ -703,6 +703,7 @@ export function RacingTrack({ showCurbs = true, night = false, withTerrain = tru
 export function FolioTopDownCam({
   pose,
   zoomMultiplier = 1,
+  mobile = false,
   inspecting = false,
   inspectTarget,
   inspectCamPos,
@@ -710,6 +711,8 @@ export function FolioTopDownCam({
 }: {
   pose: MutableRefObject<CarPose>;
   zoomMultiplier?: number;
+  /** Touch devices: pull the chase camera back a little so the car and scene do not feel oversized. */
+  mobile?: boolean;
   inspecting?: boolean;
   inspectTarget?: THREE.Vector3;
   inspectCamPos?: THREE.Vector3;
@@ -717,6 +720,7 @@ export function FolioTopDownCam({
   freeCam?: boolean;
 }) {
   const camera = useThree((s) => s.camera);
+  const size = useThree((s) => s.size);
   const st = useRef({
     ready: false,
     smoothedTarget: new THREE.Vector3(),
@@ -727,6 +731,7 @@ export function FolioTopDownCam({
     returnT: 0,
     fromPos: new THREE.Vector3(),
     fromQuat: new THREE.Quaternion(),
+    tmpPos: new THREE.Vector3(),
     tmpMat: new THREE.Matrix4(),
     tmpQuat: new THREE.Quaternion(),
   });
@@ -751,8 +756,11 @@ export function FolioTopDownCam({
       s.smoothedTarget.lerp(goalTarget, 1 - Math.exp(-6.5 * dt));
     }
 
-    // Dynamic zoom based on driving speed
-    const baseRadius = 28 * zoomMultiplier;
+    // Dynamic zoom based on driving speed. On phones the scene is physically small, so pull the
+    // camera back 22–30% to keep the car and track from feeling oversized.
+    const viewAspect = size.width / Math.max(1, size.height);
+    const mobileZoom = mobile ? (viewAspect < 1 ? 1.3 : 1.22) : 1;
+    const baseRadius = 28 * zoomMultiplier * mobileZoom;
     const speedZoom = Math.min(14, Math.abs(p.speed) * 0.45);
     const targetRadius = baseRadius + speedZoom;
     s.currentRadius += (targetRadius - s.currentRadius) * (1 - Math.exp(-3.5 * dt));
@@ -799,9 +807,13 @@ export function FolioTopDownCam({
       return;
     }
 
-    if (s.inspectAlpha > 0.001 && inspectCamPos) {
+    if (s.inspectAlpha > 0.001 && inspectCamPos && inspectTarget) {
+      // On narrow screens the holographic text column is wider than the viewport, so back the
+      // inspection camera off along the same sight line until the whole landmark + text fits.
+      const pull = viewAspect < 1 ? Math.min(2.2, 1 / viewAspect) : 1;
+      s.tmpPos.copy(inspectCamPos).sub(inspectTarget).multiplyScalar(pull).add(inspectTarget);
       // Smoothly blend position between driving overhead and inspection angle
-      camera.position.lerpVectors(driveCamPos, inspectCamPos, s.inspectAlpha);
+      camera.position.lerpVectors(driveCamPos, s.tmpPos, s.inspectAlpha);
     } else {
       // 100% rigid lock to smoothed target when driving — zero lag, zero wobble, zero dizziness
       camera.position.set(driveCamPos.x, driveCamPos.y, driveCamPos.z);

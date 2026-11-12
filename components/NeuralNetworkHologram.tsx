@@ -1,20 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { MutableRefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { groundHeight } from "@/components/Terrain";
+import type { CarPose } from "@/components/FolioCar";
 import { NEURAL_POS } from "@/components/landmarkConfig";
 import HolographicMaterial, { type HolographicMaterialProps } from "@/components/HolographicMaterial";
 import HologramBase, { HOLO_COLOR, LANDMARK_BASE_SIZE } from "@/components/HologramBase";
+import HoloText from "@/components/HoloText";
+import HoloKeyPrompt from "@/components/HoloKeyPrompt";
+import { NEURAL_LINES } from "@/components/landmarkProjects";
 import netData from "@/data/neuralHologram.json";
 
 export { NEURAL_POS };
 
 type NeuralNetworkHologramProps = {
+  pose: MutableRefObject<CarPose>;
+  inspecting: boolean;
+  onNearChange: (near: boolean) => void;
+  onInspectToggle: (inspect: boolean) => void;
   /** Night mode uses additive (glowing) blending; in daylight it falls back to normal blending so it stays visible. */
   night?: boolean;
+  /** Touch devices get a tap gesture prompt instead of an Enter key. */
+  touch?: boolean;
   hologram?: HolographicMaterialProps;
 };
 
@@ -92,12 +103,22 @@ function writeInstance(arr: Float32Array, i: number, x: number, y: number, z: nu
  *   idle animation in neural-flows. Only the layer that is currently animating is touched each frame.
  * - it turns slowly on the plinth and is solid (Terrain registers a collider at NEURAL_POS)
  */
-export default function NeuralNetworkHologram({ night = true, hologram }: NeuralNetworkHologramProps) {
+export default function NeuralNetworkHologram({
+  pose,
+  inspecting,
+  onNearChange,
+  onInspectToggle,
+  night = true,
+  touch = false,
+  hologram,
+}: NeuralNetworkHologramProps) {
   const spinRef = useRef<THREE.Group>(null);
   const flashRef = useRef<THREE.InstancedMesh>(null);
   const packetRef = useRef<THREE.InstancedMesh>(null);
   const flashOn = useRef<boolean[]>(ARCH.map(() => false));
   const packetOn = useRef<boolean[]>(ARCH.map(() => false));
+  const [isNear, setIsNear] = useState(false);
+  const isNearRef = useRef(false);
 
   const y = groundHeight(NEURAL_POS.x, NEURAL_POS.z);
 
@@ -263,6 +284,18 @@ export default function NeuralNetworkHologram({ night = true, hologram }: Neural
       }
       if (dirty) packets.instanceMatrix.needsUpdate = true;
     }
+
+    // proximity check with the same wide hysteresis as the trophy, so the prompt doesn't flicker at the edge
+    const p = pose.current;
+    if (p) {
+      const dist = Math.hypot(p.x - NEURAL_POS.x, p.z - NEURAL_POS.z);
+      const nearNow = isNearRef.current ? dist < 10.0 : dist < 6.5;
+      if (nearNow !== isNearRef.current) {
+        isNearRef.current = nearNow;
+        setIsNear(nearNow);
+        onNearChange(nearNow);
+      }
+    }
   });
 
   const holo = { hologramColor: HOLO_COLOR, hologramBrightness: 1.3, scanlineSize: 8, enableAdditive: night, ...hologram };
@@ -290,6 +323,19 @@ export default function NeuralNetworkHologram({ night = true, hologram }: Neural
             renderOrder={4}
           />
         </group>
+
+        {/* Neural Flows as free-floating holographic writing, revealed while inspecting */}
+        <HoloText lines={NEURAL_LINES} active={inspecting} night={night} />
+
+        {/* Floating prompt: a quiet orb that becomes an Enter key (or a tap gesture on touch) as the car pulls up */}
+        <HoloKeyPrompt
+          active={isNear}
+          visible={!inspecting}
+          onActivate={() => onInspectToggle(true)}
+          position={[2.5, 1.9, 0]}
+          night={night}
+          touch={touch}
+        />
       </HologramBase>
     </group>
   );

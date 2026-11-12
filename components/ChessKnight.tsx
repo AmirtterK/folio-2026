@@ -1,18 +1,29 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { MutableRefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { groundHeight } from "@/components/Terrain";
+import type { CarPose } from "@/components/FolioCar";
 import { KNIGHT_POS } from "@/components/landmarkConfig";
 import HolographicMaterial, { type HolographicMaterialProps } from "@/components/HolographicMaterial";
 import HologramBase, { HOLO_COLOR, LANDMARK_BASE_SIZE } from "@/components/HologramBase";
+import HoloText from "@/components/HoloText";
+import HoloKeyPrompt from "@/components/HoloKeyPrompt";
+import { KNIGHT_LINES } from "@/components/landmarkProjects";
 
 export { KNIGHT_POS };
 
 type ChessKnightProps = {
+  pose: MutableRefObject<CarPose>;
+  inspecting: boolean;
+  onNearChange: (near: boolean) => void;
+  onInspectToggle: (inspect: boolean) => void;
   /** Night mode uses additive (glowing) blending; in daylight it falls back to normal blending so it stays visible. */
   night?: boolean;
+  /** Touch devices get a tap gesture prompt instead of an Enter key. */
+  touch?: boolean;
   hologram?: HolographicMaterialProps;
 };
 
@@ -25,8 +36,18 @@ const KNIGHT_SCALE = 1.25; // the piece is ~2.1 high, so about 2.6 world units o
  * Piece: base + neck are a revolved profile (LatheGeometry), the head is an extruded 2D horse-head outline.
  * The piece faces +X in its own space; KNIGHT_POS.yaw turns it toward the oncoming cars.
  */
-export default function ChessKnight({ night = true, hologram }: ChessKnightProps) {
+export default function ChessKnight({
+  pose,
+  inspecting,
+  onNearChange,
+  onInspectToggle,
+  night = true,
+  touch = false,
+  hologram,
+}: ChessKnightProps) {
   const spinRef = useRef<THREE.Group>(null);
+  const [isNear, setIsNear] = useState(false);
+  const isNearRef = useRef(false);
 
   const y = groundHeight(KNIGHT_POS.x, KNIGHT_POS.z);
 
@@ -110,6 +131,18 @@ export default function ChessKnight({ night = true, hologram }: ChessKnightProps
   useFrame((state) => {
     // slow turntable spin around the plinth, starting from the oncoming-car heading
     if (spinRef.current) spinRef.current.rotation.y = KNIGHT_POS.yaw + state.clock.elapsedTime * 0.5;
+
+    // proximity check with the same wide hysteresis as the trophy, so the prompt doesn't flicker at the edge
+    const p = pose.current;
+    if (p) {
+      const dist = Math.hypot(p.x - KNIGHT_POS.x, p.z - KNIGHT_POS.z);
+      const nearNow = isNearRef.current ? dist < 10.0 : dist < 6.5;
+      if (nearNow !== isNearRef.current) {
+        isNearRef.current = nearNow;
+        setIsNear(nearNow);
+        onNearChange(nearNow);
+      }
+    }
   });
 
   const holo = { hologramColor: HOLO_COLOR, hologramBrightness: 1.3, scanlineSize: 8, enableAdditive: night, ...hologram };
@@ -134,6 +167,19 @@ export default function ChessKnight({ night = true, hologram }: ChessKnightProps
             ))}
           </group>
         </group>
+
+        {/* Chess Ritter as free-floating holographic writing, revealed while inspecting */}
+        <HoloText lines={KNIGHT_LINES} active={inspecting} night={night} />
+
+        {/* Floating prompt: a quiet orb that becomes an Enter key (or a tap gesture on touch) as the car pulls up */}
+        <HoloKeyPrompt
+          active={isNear}
+          visible={!inspecting}
+          onActivate={() => onInspectToggle(true)}
+          position={[1.65, 1.95, 0]}
+          night={night}
+          touch={touch}
+        />
       </HologramBase>
     </group>
   );

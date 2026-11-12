@@ -112,9 +112,9 @@ const R17_Z_SHIFT = -0.04; // the GLB's axles sit at z = 1.24 / -1.16; shift so 
 const R17_EXHAUST = { x: 0.45, y: 0.32, z: -2.1 };
 const R17_LAMP = { x: 0.54, y: 0.6, z: 1.92 };
 
-// Kick off the default car download as soon as this module is evaluated, so it
+// Kick off the default car (Ferrari F599) download as soon as this module is evaluated, so it
 // is usually already cached by the time the Canvas mounts.
-useGLTF.preload(R17_URL);
+useGLTF.preload("/models/ferrari_f599.glb");
 
 /* Ferrari SF90 (scripts/build-sf90.mjs): same wheelbase as the toy car, small F1 wheels, one centre exhaust. Credit: "Ferrari F1 2019" by vecarz, CC-BY-4.0. */
 const SF90_URL = "/models/sf90.glb";
@@ -1240,10 +1240,10 @@ export default function FolioCar({
             <Suspense fallback={null}>
               <R17Body mats={mats} spinGroups={spinGroups} steerPivots={steerPivots} cast={driving} />
               <CarReady onReady={onReady} />
+              {[-1, 1].map((s) => (
+                <HeadlightSide key={s} x={s * R17_LAMP.x} y={R17_LAMP.y} z={R17_LAMP.z} level={lightLevel} beam={beam} />
+              ))}
             </Suspense>
-            {[-1, 1].map((s) => (
-              <HeadlightSide key={s} x={s * R17_LAMP.x} y={R17_LAMP.y} z={R17_LAMP.z} level={lightLevel} beam={beam} />
-            ))}
           </>
         )}
         {sf90 && (
@@ -1253,8 +1253,8 @@ export default function FolioCar({
               <Suspense fallback={null}>
                 <Sf90Body spinGroups={spinGroups} steerPivots={steerPivots} cast={driving} />
                 <CarReady onReady={onReady} />
+                <RearDot mats={mats} y={SF90_DOT.y} z={SF90_DOT.z} />
               </Suspense>
-              <RearDot mats={mats} y={SF90_DOT.y} z={SF90_DOT.z} />
             </group>
           </>
         )}
@@ -1270,8 +1270,8 @@ export default function FolioCar({
                 cast={driving}
               />
               <CarReady onReady={onReady} />
+              <RearLights mats={mats} x={PORSCHE_LIGHTS.x} y={PORSCHE_LIGHTS.y} z={PORSCHE_LIGHTS.z} />
             </Suspense>
-            <RearLights mats={mats} x={PORSCHE_LIGHTS.x} y={PORSCHE_LIGHTS.y} z={PORSCHE_LIGHTS.z} />
           </>
         )}
         {ferrari && (
@@ -1286,8 +1286,8 @@ export default function FolioCar({
                 cast={driving}
               />
               <CarReady onReady={onReady} />
+              <RearLights mats={mats} x={FERRARI_LIGHTS.x} y={FERRARI_LIGHTS.y} z={FERRARI_LIGHTS.z} />
             </Suspense>
-            <RearLights mats={mats} x={FERRARI_LIGHTS.x} y={FERRARI_LIGHTS.y} z={FERRARI_LIGHTS.z} />
           </>
         )}
         {corvette && (
@@ -1302,8 +1302,8 @@ export default function FolioCar({
                 cast={driving}
               />
               <CarReady onReady={onReady} />
+              <RearLights mats={mats} x={CORVETTE_LIGHTS.x} y={CORVETTE_LIGHTS.y} z={CORVETTE_LIGHTS.z} />
             </Suspense>
-            <RearLights mats={mats} x={CORVETTE_LIGHTS.x} y={CORVETTE_LIGHTS.y} z={CORVETTE_LIGHTS.z} />
           </>
         )}
         {nissan && (
@@ -1311,8 +1311,8 @@ export default function FolioCar({
             <Suspense fallback={null}>
               <NissanBody spinGroups={spinGroups} steerPivots={steerPivots} cast={driving} />
               <CarReady onReady={onReady} />
+              <RearLights mats={mats} x={NISSAN_LIGHTS.x} y={NISSAN_LIGHTS.y} z={NISSAN_LIGHTS.z} />
             </Suspense>
-            <RearLights mats={mats} x={NISSAN_LIGHTS.x} y={NISSAN_LIGHTS.y} z={NISSAN_LIGHTS.z} />
           </>
         )}
         {toy && (

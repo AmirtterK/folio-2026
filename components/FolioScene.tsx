@@ -24,9 +24,11 @@ import HandGestures from "@/components/HandGestures";
 import AchievementTrophy from "@/components/AchievementTrophy";
 import ChessKnight from "@/components/ChessKnight";
 import NeuralNetworkHologram from "@/components/NeuralNetworkHologram";
-import { TROPHY_POS } from "@/components/landmarkConfig";
+import CarLoadingHologram from "@/components/CarLoadingHologram";
+import { TROPHY_POS, KNIGHT_POS, NEURAL_POS } from "@/components/landmarkConfig";
 
 type View = "track" | "smoke" | "html";
+type LandmarkId = "trophy" | "knight" | "neural";
 
 /** Trees, bushes, rocks and stones farther than this from the car are not drawn (free cam draws everything). */
 const SCENERY_RADIUS = 100;
@@ -222,7 +224,7 @@ const HINT: React.CSSProperties = {
 export default function FolioScene() {
   const [view, setView] = useState<View>("track");
   const [color, setColor] = useState("#8d9196");
-  const [carModel, setCarModel] = useState<CarModel>("r17");
+  const [carModel, setCarModel] = useState<CarModel>("ferrari");
   const [smokeOn, setSmokeOn] = useState(true);
   const [showCurbs, setShowCurbs] = useState(true);
   const [night, setNight] = useState(true);
@@ -254,42 +256,45 @@ export default function FolioScene() {
     return () => coarse.removeEventListener?.("change", update);
   }, []);
 
-  /* ---- Landmark Achievement Inspection State ---- */
-  const [inspectingTrophy, setInspectingTrophy] = useState(false);
-  const [isNearTrophy, setIsNearTrophy] = useState(false);
-  const isNearTrophyRef = useRef(false);
-  const inspectingTrophyRef = useRef(false);
-  isNearTrophyRef.current = isNearTrophy;
-  inspectingTrophyRef.current = inspectingTrophy;
+  /* ---- Landmark inspection state: trophy, chess knight and neural network share the same flow ---- */
+  const [inspecting, setInspecting] = useState<LandmarkId | null>(null);
+  const [nearLandmark, setNearLandmark] = useState<LandmarkId | null>(null);
+  const nearLandmarkRef = useRef<LandmarkId | null>(null);
+  const inspectingRef = useRef<LandmarkId | null>(null);
+  nearLandmarkRef.current = nearLandmark;
+  inspectingRef.current = inspecting;
 
   const emptyInput = useRef<CarInput>({ fwd: 0, back: 0, left: 0, right: 0, brake: 1 });
   // Free-cam movement keys (WASD) -- kept separate from the car's input so arrows can still drive
   const camKeys = useRef<CarInput>({ fwd: 0, back: 0, left: 0, right: 0, brake: 0 });
 
-  const handleTrophyNearChange = useCallback((near: boolean) => {
-    setIsNearTrophy(near);
-    if (!near) {
-      setInspectingTrophy(false);
-    }
+  const handleLandmarkNearChange = useCallback((id: LandmarkId, near: boolean) => {
+    setNearLandmark((cur) => (near ? id : cur === id ? null : cur));
+    if (!near) setInspecting((cur) => (cur === id ? null : cur));
   }, []);
 
-  const trophyY = groundHeight(TROPHY_POS.x, TROPHY_POS.z);
-  // Standing view: camera at eye level, shifted right of the cup (same heading, no turn), so the
-  // cup sits on the left and the floating holographic writing sits beside it.
-  const inspectTarget = useMemo(
-    () => new THREE.Vector3(TROPHY_POS.x + 0.85, trophyY + 2.3, TROPHY_POS.z),
-    [trophyY]
-  );
-  // fov is 26, so 10 back frames the whole trophy on its shared landmark base (about 4.0 high)
-  // plus the taller holographic text column without cropping the projector foot.
-  const inspectCamPos = useMemo(
-    () => new THREE.Vector3(TROPHY_POS.x + 0.85, trophyY + 2.4, TROPHY_POS.z + 10.0),
-    [trophyY]
-  );
+  // Standing view per landmark: camera at eye level, shifted right of the hologram (same heading, no
+  // turn), so the landmark sits on the left and its floating holographic writing sits beside it.
+  // The fov is 26, so 10 back frames the whole landmark on its shared base plus the text column.
+  const inspectViews = useMemo(() => {
+    const make = (x: number, z: number) => {
+      const y = groundHeight(x, z);
+      return {
+        target: new THREE.Vector3(x + 0.9, y + 2.3, z),
+        cam: new THREE.Vector3(x + 0.9, y + 2.4, z + 10.0),
+      };
+    };
+    return {
+      trophy: make(TROPHY_POS.x, TROPHY_POS.z),
+      knight: make(KNIGHT_POS.x, KNIGHT_POS.z),
+      neural: make(NEURAL_POS.x, NEURAL_POS.z),
+    };
+  }, []);
 
   /* ---- Loading state ---- */
   const [sceneReady, setSceneReady] = useState(false);
   const [carReady, setCarReady] = useState(false);
+  const [carLoaded, setCarLoaded] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
   const [canvasDeferred, setCanvasDeferred] = useState(false);
   const readySignaled = useRef(false);
@@ -323,6 +328,7 @@ export default function FolioScene() {
 
   // Called by FolioCar only after the GLB body has mounted in the scene.
   const handleSceneReady = useCallback(() => {
+    setCarLoaded(true);
     setCarReady(true);
     setLoadProgress(100);
     if (readySignaled.current) return;
@@ -384,7 +390,7 @@ export default function FolioScene() {
       // Free cam: F toggles, Esc exits
       if (e.code === "KeyF" && !e.repeat) {
         e.preventDefault();
-        setInspectingTrophy(false);
+        setInspecting(null);
         setFreeCam((v) => !v);
         return;
       }
@@ -395,8 +401,8 @@ export default function FolioScene() {
       }
 
       // If inspecting, pressing ANY button immediately exits and returns to normal driving view
-      if (inspectingTrophyRef.current) {
-        setInspectingTrophy(false);
+      if (inspectingRef.current) {
+        setInspecting(null);
         if (e.code === "Enter" || e.code === "NumpadEnter" || e.code === "Escape" || e.code === "Space") {
           e.preventDefault();
           return;
@@ -417,8 +423,9 @@ export default function FolioScene() {
         e.preventDefault();
       }
       if (e.code === "Enter" || e.code === "NumpadEnter") {
-        if (isNearTrophyRef.current && !freeCamRef.current) {
-          setInspectingTrophy(true);
+        const near = nearLandmarkRef.current;
+        if (near && !freeCamRef.current) {
+          setInspecting(near);
           e.preventDefault();
         }
       }
@@ -525,7 +532,7 @@ export default function FolioScene() {
       data-touch={isTouch ? "true" : "false"}
       style={{ position: "fixed", inset: 0, backgroundColor: night ? "#0a1238" : "#cbe2f2" }}
       onClick={() => {
-        if (inspectingTrophyRef.current) setInspectingTrophy(false);
+        if (inspectingRef.current) setInspecting(null);
       }}
     >
       {is3d && canvasDeferred ? (
@@ -574,23 +581,38 @@ export default function FolioScene() {
               />
               <RacingTrack showCurbs={showCurbs} night={night} withTerrain={true} pose={pose} />
               <Terrain pose={pose} radius={freeCam ? Infinity : SCENERY_RADIUS} />
-              <ChessKnight night={night} />
-              <NeuralNetworkHologram night={night} />
+              <ChessKnight
+                pose={pose}
+                night={night}
+                inspecting={inspecting === "knight"}
+                onNearChange={(near) => handleLandmarkNearChange("knight", near)}
+                onInspectToggle={(on) => setInspecting(on ? "knight" : null)}
+                touch={isTouch}
+              />
+              <NeuralNetworkHologram
+                pose={pose}
+                night={night}
+                inspecting={inspecting === "neural"}
+                onNearChange={(near) => handleLandmarkNearChange("neural", near)}
+                onInspectToggle={(on) => setInspecting(on ? "neural" : null)}
+                touch={isTouch}
+              />
               <AchievementTrophy
                 pose={pose}
                 night={night}
-                inspecting={inspectingTrophy}
-                onNearChange={handleTrophyNearChange}
-                onInspectToggle={setInspectingTrophy}
+                inspecting={inspecting === "trophy"}
+                onNearChange={(near) => handleLandmarkNearChange("trophy", near)}
+                onInspectToggle={(on) => setInspecting(on ? "trophy" : null)}
                 touch={isTouch}
               />
+              <CarLoadingHologram pose={pose} visible={!carLoaded} night={night} />
               <FolioCar
                 key={`car-${carResetKey}-${carModel}`}
                 color={color}
                 keyboard={false}
-                input={inspectingTrophy ? emptyInput : input}
+                input={inspecting || !carLoaded ? emptyInput : input}
                 onSpeed={onSpeed}
-                smoke={smokeOn}
+                smoke={smokeOn && carLoaded}
                 terrain={groundHeight}
                 grip={groundGrip}
                 collide={groundCollide}
@@ -606,9 +628,10 @@ export default function FolioScene() {
               <FolioTopDownCam
                 pose={pose}
                 zoomMultiplier={zoomMultiplier}
-                inspecting={inspectingTrophy}
-                inspectTarget={inspectTarget}
-                inspectCamPos={inspectCamPos}
+                mobile={isTouch}
+                inspecting={!!inspecting}
+                inspectTarget={inspecting ? inspectViews[inspecting].target : undefined}
+                inspectCamPos={inspecting ? inspectViews[inspecting].cam : undefined}
                 freeCam={freeCam}
               />
               {freeCam && <FreeCamControls pose={pose} input={camKeys} />}
@@ -618,7 +641,7 @@ export default function FolioScene() {
               <ambientLight intensity={0.8} />
               <hemisphereLight args={["#ffffff", "#555555", 0.5]} />
               <directionalLight position={[4, 7, 5]} intensity={1.2} />
-              <FolioCar key={carModel} color={color} keyboard={false} input={input} onSpeed={onSpeed} smoke={smokeOn} carScale={1.155} model={carModel} onReady={handleSceneReady} />
+              <FolioCar key={carModel} color={color} keyboard={false} input={carLoaded ? input : emptyInput} onSpeed={onSpeed} smoke={smokeOn && carLoaded} carScale={1.155} model={carModel} onReady={handleSceneReady} />
               <OrbitControls target={[0, 1, 0]} />
             </>
           )}
@@ -668,6 +691,7 @@ export default function FolioScene() {
               onChange={(e) => {
                 const next = e.target.value as CarModel;
                 if (next === carModel) return;
+                setCarLoaded(false); // keep the new car still (and light/smoke-free) until its GLB is in
                 setCarModel(next);
                 resetCar(); // respawn on the grid with the new car
                 e.currentTarget.blur();
@@ -685,11 +709,11 @@ export default function FolioScene() {
                 boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
               }}
             >
+              <option value="ferrari">Ferrari F599</option>
               <option value="r17">Renault R17</option>
               <option value="sf90">Ferrari SF90</option>
               <option value="nissan">Nissan Silvia S15</option>
               <option value="porsche">Porsche Panamera</option>
-              <option value="ferrari">Ferrari F599</option>
               <option value="corvette">Corvette Stingray</option>
             </select>
           </label>
@@ -801,7 +825,7 @@ export default function FolioScene() {
 
             <button
               onClick={() => {
-                setInspectingTrophy(false);
+                setInspecting(null);
                 setFreeCam((v) => !v);
               }}
               title="Free cam: orbit, pan and zoom around the map. Press F or Esc to return."

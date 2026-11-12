@@ -26,6 +26,7 @@ import AchievementTrophy from "@/components/AchievementTrophy";
 import ChessKnight from "@/components/ChessKnight";
 import NeuralNetworkHologram from "@/components/NeuralNetworkHologram";
 import CarLoadingHologram from "@/components/CarLoadingHologram";
+import LogoObstacle from "@/components/LogoObstacle";
 import { TROPHY_POS, KNIGHT_POS, NEURAL_POS } from "@/components/landmarkConfig";
 
 type View = "track" | "smoke" | "html";
@@ -681,6 +682,9 @@ export default function FolioScene() {
               />
               <MobileTapHandler pose={pose} />
               <CarLoadingHologram pose={pose} visible={!carLoaded} night={night} />
+              <LogoObstacle position={[0, 0.8, 0]} color="#D97757" label="Claude" />
+              <LogoObstacle position={[3, 0.8, 0]} color="#7A9DFF" label="Codex" />
+              <LogoObstacle position={[-3, 0.8, 0]} color="#ffffff" label="ChatGPT" />
               <FolioCar
                 key={`car-${carResetKey}-${carModel}`}
                 color={color}

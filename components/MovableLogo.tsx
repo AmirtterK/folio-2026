@@ -24,7 +24,7 @@ export default function MovableLogo({ position, children }: MovableLogoProps) {
   useEffect(() => {
     if (!world) return;
     const body = world.createRigidBody(
-      RAPIER.RigidBodyDesc.dynamic().setTranslation(position[0], groundHeight(position[0], position[2]) + 3.0, position[2])
+      RAPIER.RigidBodyDesc.dynamic().setTranslation(position[0], groundHeight(position[0], position[2]) + 2.0, position[2])
     );
     world.createCollider(RAPIER.ColliderDesc.cuboid(1.5, 1.5, 0.5), body);
     bodyRef.current = body;
@@ -49,7 +49,7 @@ export default function MovableLogo({ position, children }: MovableLogoProps) {
   });
 
   return (
-    <group ref={ref} position={[position[0], groundHeight(position[0], position[2]) + 3.0, position[2]]}>
+    <group ref={ref} position={[position[0], groundHeight(position[0], position[2]) + 2.0, position[2]]}>
       {children}
     </group>
   );

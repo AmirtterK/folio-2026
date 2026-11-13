@@ -11,8 +11,8 @@ export const KNIGHT_POS = {
   yaw: Math.PI,
 };
 
-/** Achievement trophy milestone, after chess knight */
+/** Achievement trophy milestone, after chess knight, on the track curve */
 export const TROPHY_POS = {
-  x: -76,
-  z: 57,
+  x: -73.2,
+  z: 53.7,
 };

@@ -112,13 +112,8 @@ const R17_Z_SHIFT = -0.04; // the GLB's axles sit at z = 1.24 / -1.16; shift so 
 const R17_EXHAUST = { x: 0.45, y: 0.32, z: -2.1 };
 const R17_LAMP = { x: 0.54, y: 0.6, z: 1.92 };
 
-// Kick off all car downloads up front so switching models never stalls the scene.
-useGLTF.preload("/models/r17.glb");
-useGLTF.preload("/models/sf90.glb");
-useGLTF.preload("/models/porsche_panamera.glb");
+// Preload only the default car for faster startup; other cars load on selection.
 useGLTF.preload("/models/ferrari_f599.glb");
-useGLTF.preload("/models/corvette_stingray.glb");
-useGLTF.preload("/models/nissan_silvia_s15.glb");
 
 /* Ferrari SF90 (scripts/build-sf90.mjs): same wheelbase as the toy car, small F1 wheels, one centre exhaust. Credit: "Ferrari F1 2019" by vecarz, CC-BY-4.0. */
 const SF90_URL = "/models/sf90.glb";

@@ -14,5 +14,5 @@ export const KNIGHT_POS = {
 /** Achievement trophy milestone, after chess knight */
 export const TROPHY_POS = {
   x: -76,
-  z: 56,
+  z: 57,
 };

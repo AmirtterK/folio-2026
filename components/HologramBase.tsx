@@ -13,7 +13,7 @@ export const PLINTH_RADIUS = 0.44;
 export const LANDMARK_BASE_SIZE = 2.52;
 
 /** World height of the projector dish for a given base size (children are placed here). */
-export const hologramBaseTop = (size = LANDMARK_BASE_SIZE) => PLINTH_TOP * (1 + (size - 1) * 0.4);
+export const hologramBaseTop = (size = LANDMARK_BASE_SIZE) => PLINTH_TOP * (1 + (size - 1) * 0.6);
 
 /** Radar ping on the asphalt: rings leave the projector, spread out, fade, then start again. */
 const PING_COUNT = 3;
@@ -104,7 +104,7 @@ export default function HologramBase({
   const lightRef = useRef<THREE.PointLight>(null);
   const r0 = ringStart ?? (PLINTH_RADIUS + 0.03) * size;
   // the projector widens with `size` and gets a little taller, so a big piece still sits on a sensible-looking base
-  const sy = 1 + (size - 1) * 0.4;
+  const sy = 1 + (size - 1) * 0.6;
   const top = hologramBaseTop(size);
 
   const geos = useMemo(() => {

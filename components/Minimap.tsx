@@ -201,18 +201,7 @@ export default function Minimap({ pose, visible, onToggle }: MinimapProps) {
             </g>
           </g>
 
-          {/* Logo obstacles at track center */}
-          {[
-            { x: 15, z: 57, color: "#D97757", glyph: "C" },
-            { x: 5, z: 57, color: "#7A9DFF", glyph: "X" },
-            { x: -5, z: 57, color: "#ffffff", glyph: "G" },
-            { x: -15, z: 57, color: "#EEEEEE", glyph: "L" },
-          ].map((o, i) => (
-            <g key={i} transform={`translate(${(o.x / TRACK_SCALE + TRACK_CENTER_X).toFixed(1)}, ${(o.z / TRACK_SCALE + TRACK_CENTER_Z).toFixed(1)})`}>
-              <circle r="9" fill="rgba(10,18,56,0.85)" stroke={o.color} strokeWidth="2" />
-              <text x="0" y="4" fontSize="12" textAnchor="middle" fill={o.color} style={{ pointerEvents: "none" }}>{o.glyph}</text>
-            </g>
-          ))}
+
 
           {/* Real-time Player Navigation Pointer (Google Maps style) */}
           <g ref={markerRef}>

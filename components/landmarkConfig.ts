@@ -13,6 +13,6 @@ export const KNIGHT_POS = {
 
 /** Achievement trophy milestone, after chess knight, on the track curve */
 export const TROPHY_POS = {
-  x: -73.2,
-  z: 53.7,
+  x: -77.65,
+  z: 51.36,
 };

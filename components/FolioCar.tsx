@@ -85,7 +85,7 @@ export type FolioCarProps = {
 
 const KEY_MAP: Record<string, keyof CarInput> = {
   KeyW: "fwd", ArrowUp: "fwd", KeyS: "back", ArrowDown: "back",
-  KeyA: "left", ArrowLeft: "left", KeyD: "right", ArrowRight: "right", Space: "brake",
+  KeyA: "right", ArrowLeft: "right", KeyD: "left", ArrowRight: "left", Space: "brake",
 };
 
 /**

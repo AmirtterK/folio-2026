@@ -119,37 +119,37 @@ function createTapTexture(): THREE.CanvasTexture {
   ctx.clearRect(0, 0, size, size);
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.shadowColor = `rgba(${HOLO_RGB},0.9)`;
-  ctx.shadowBlur = 26;
+  ctx.shadowColor = `rgba(${HOLO_RGB},0.95)`;
+  ctx.shadowBlur = 34;
 
-  const cx = 150;
+  const cx = 145;
   const cy = 256;
 
   // Concentric pulsing rings.
   ctx.strokeStyle = HOLO_COLOR;
-  ctx.lineWidth = 12;
-  for (const r of [52, 86, 120]) {
+  ctx.lineWidth = 16;
+  for (const r of [58, 96, 134]) {
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.stroke();
   }
 
   // Filled core dot.
-  ctx.fillStyle = "rgba(94,200,255,0.22)";
+  ctx.fillStyle = "rgba(94,200,255,0.28)";
   ctx.beginPath();
-  ctx.arc(cx, cy, 34, 0, Math.PI * 2);
+  ctx.arc(cx, cy, 42, 0, Math.PI * 2);
   ctx.fill();
   ctx.strokeStyle = HOLO_COLOR;
-  ctx.lineWidth = 8;
+  ctx.lineWidth = 10;
   ctx.stroke();
 
   // TAP label beside the pulse.
   ctx.shadowBlur = 0;
   ctx.fillStyle = "#eefdff";
-  ctx.font = "700 74px system-ui, -apple-system, 'Segoe UI', sans-serif";
+  ctx.font = "800 110px system-ui, -apple-system, 'Segoe UI', sans-serif";
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillText("TAP", 290, 256);
+  ctx.fillText("TAP", 300, 256);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -364,7 +364,7 @@ export default function HoloKeyPrompt({
       >
         {assets.mode === "tap" ? (
           <mesh material={assets.tapMat} position={[0, 0, 0.02]}>
-            <planeGeometry args={[1.05, 1.05]} />
+            <planeGeometry args={[1.8, 1.8]} />
           </mesh>
         ) : (
           <>

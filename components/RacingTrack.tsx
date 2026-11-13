@@ -757,9 +757,9 @@ export function FolioTopDownCam({
     }
 
     // Dynamic zoom based on driving speed. On phones the scene is physically small, so pull the
-    // camera back 22–30% to keep the car and track from feeling oversized.
+    // camera back to keep the car and track from feeling oversized.
     const viewAspect = size.width / Math.max(1, size.height);
-    const mobileZoom = mobile ? (viewAspect < 1 ? 1.8 : 1.6) : 1;
+    const mobileZoom = mobile ? (viewAspect < 1 ? 1.95 : 1.75) : 1;
     const baseRadius = 28 * zoomMultiplier * mobileZoom;
     const speedZoom = Math.min(14, Math.abs(p.speed) * 0.45);
     const targetRadius = baseRadius + speedZoom;

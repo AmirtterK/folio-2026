@@ -192,10 +192,10 @@ const KEY_MAP: Record<string, keyof CarInput> = {
   ArrowUp: "fwd",
   KeyS: "back",
   ArrowDown: "back",
-  KeyA: "left",
-  ArrowLeft: "left",
-  KeyD: "right",
-  ArrowRight: "right",
+  KeyA: "right",
+  ArrowLeft: "right",
+  KeyD: "left",
+  ArrowRight: "left",
   Space: "brake",
 };
 
@@ -203,8 +203,8 @@ const KEY_MAP: Record<string, keyof CarInput> = {
 const CAM_KEYS: Record<string, "fwd" | "back" | "left" | "right"> = {
   KeyW: "fwd",
   KeyS: "back",
-  KeyA: "left",
-  KeyD: "right",
+  KeyA: "right",
+  KeyD: "left",
 };
 
 const BTN: React.CSSProperties = {

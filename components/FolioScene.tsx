@@ -299,10 +299,18 @@ export default function FolioScene() {
   // Standing view per landmark: camera at eye level, shifted right of the hologram (same heading, no
   // turn), so the landmark sits on the left and its floating holographic writing sits beside it.
   // The fov is 26, so 10 back frames the whole landmark on its shared base plus the text column.
+  // On mobile/touch portrait, center the landmark with writing above it and frame the full tall
+  // projector + hologram + text stack (projectors are tall) within view.
   const inspectViews = useMemo(() => {
     const make = (x: number, z: number) => {
       const y = groundHeight(x, z);
-      const back = isTouch ? 8.0 : 10.0;
+      if (isTouch) {
+        return {
+          target: new THREE.Vector3(x, y + 3.4, z),
+          cam: new THREE.Vector3(x, y + 4.0, z + 11.0),
+        };
+      }
+      const back = 10.0;
       return {
         target: new THREE.Vector3(x + 0.9, y + 2.3, z),
         cam: new THREE.Vector3(x + 0.9, y + 2.4, z + back),

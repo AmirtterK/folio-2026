@@ -808,9 +808,14 @@ export function FolioTopDownCam({
     }
 
     if (s.inspectAlpha > 0.001 && inspectCamPos && inspectTarget) {
-      // On narrow screens the holographic text column is wider than the viewport, so back the
-      // inspection camera off along the same sight line until the whole landmark + text fits.
-      const pull = mobile && viewAspect < 1 ? 1.0 : (viewAspect < 1 ? Math.min(2.2, 1 / viewAspect) : 1);
+      // On narrow screens back the inspection camera off along the sight line until content fits.
+      // Mobile portrait needs extra pull to fit the full tall projector + hologram + text above.
+      let pull = 1;
+      if (mobile && viewAspect < 1) {
+        pull = 1.55;
+      } else if (viewAspect < 1) {
+        pull = Math.min(2.2, 1 / viewAspect);
+      }
       s.tmpPos.copy(inspectCamPos).sub(inspectTarget).multiplyScalar(pull).add(inspectTarget);
       // Smoothly blend position between driving overhead and inspection angle
       camera.position.lerpVectors(driveCamPos, s.tmpPos, s.inspectAlpha);

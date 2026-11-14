@@ -22,6 +22,7 @@ type HoloKeyPromptProps = {
   visible?: boolean;
   onActivate: () => void;
   position?: [number, number, number];
+  rotation?: [number, number, number];
   scale?: number;
   night?: boolean;
   /** Touch devices show a tap gesture instead of an Enter key. */
@@ -197,6 +198,7 @@ export default function HoloKeyPrompt({
   visible = true,
   onActivate,
   position = [0, 0, 0],
+  rotation,
   scale = 1,
   night = true,
   touch = false,

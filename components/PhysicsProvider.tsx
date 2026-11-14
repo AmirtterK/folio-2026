@@ -56,6 +56,18 @@ export function PhysicsProvider({
     })();
     return () => {
       mounted = false;
+      readyRef.current = false;
+      const world = worldRef.current;
+      worldRef.current = null;
+      carBodyRef.current = null;
+      logoBodiesRef.current.clear();
+      if (world) {
+        try {
+          world.free();
+        } catch {
+          // ignore double-free / invalid state during teardown
+        }
+      }
     };
   }, []);
 
@@ -66,10 +78,15 @@ export function PhysicsProvider({
 
     // sync car body to pose
     const p = pose.current;
-    carBody.setNextKinematicTranslation({ x: p.x, y: 0.5, z: p.z });
-    carBody.setNextKinematicRotation({ x: 0, y: Math.sin(p.yaw / 2), z: 0, w: Math.cos(p.yaw / 2) });
-
-    world.step();
+    if (!p) return;
+    try {
+      carBody.setNextKinematicTranslation({ x: p.x, y: 0.5, z: p.z });
+      carBody.setNextKinematicRotation({ x: 0, y: Math.sin(p.yaw / 2), z: 0, w: Math.cos(p.yaw / 2) });
+      world.step();
+    } catch {
+      // Physics world/body can be torn down during HMR/remount; skip this frame.
+      readyRef.current = false;
+    }
 
     // sync logo bodies back to their meshes is handled by MovableLogo reading body translation
   });

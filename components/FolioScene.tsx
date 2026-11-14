@@ -238,6 +238,34 @@ function CameraDebugUpdater({
   return null;
 }
 
+function CameraPositionApplier({
+  controlsRef,
+  position,
+  applyTick,
+  hold,
+}: {
+  controlsRef: MutableRefObject<any>;
+  position: { x: number; y: number; z: number };
+  applyTick: number;
+  hold?: boolean;
+}) {
+  const { camera } = useThree();
+  useEffect(() => {
+    if (applyTick <= 0) return;
+    camera.position.set(position.x, position.y, position.z);
+    const c = controlsRef.current;
+    if (c?.target) {
+      c.update?.();
+    }
+    camera.updateProjectionMatrix?.();
+  }, [applyTick, position.x, position.y, position.z, camera, controlsRef]);
+  useFrame(() => {
+    if (!hold) return;
+    camera.position.set(position.x, position.y, position.z);
+  });
+  return null;
+}
+
 function Joystick({ input }: { input: MutableRefObject<CarInput> }) {
   const baseRef = useRef<HTMLDivElement>(null);
   const [knob, setKnob] = useState({ x: 0, y: 0 });
@@ -335,6 +363,10 @@ export default function FolioScene() {
   const [carResetKey, setCarResetKey] = useState(0);
   // Temporary model rotation debug controls (degrees) - LinkedIn
   const [linkedinRotDeg, setLinkedinRotDeg] = useState({ x: 90, y: 0, z: -50 });
+  const [camEdit, setCamEdit] = useState({ x: 20, y: 26, z: 20 });
+  const [camApplyTick, setCamApplyTick] = useState(0);
+  const [manualCamHold, setManualCamHold] = useState(false);
+  const [inspectCamDistanceOffset, setInspectCamDistanceOffset] = useState(2);
   const camPosRef = useRef<HTMLDivElement>(null);
   const camDirRef = useRef<HTMLDivElement>(null);
   const camTargetRef = useRef<HTMLDivElement>(null);
@@ -399,25 +431,25 @@ export default function FolioScene() {
     const frameShift = right.clone().multiplyScalar(isTouch ? 1.2 : 1.5);
     const make = (x: number, z: number) => {
       const y = groundHeight(x, z);
-      const dist = isTouch ? 11.0 : 10.0;
-      const target = new THREE.Vector3(x, y + (isTouch ? 3.2 : 2.3), z).add(frameShift);
+      const dist = (isTouch ? 11.0 : 10.0) * 1.1 + inspectCamDistanceOffset;
+      const target = new THREE.Vector3(x, y + (isTouch ? 3.5 : 2.6), z).add(frameShift);
       const cam = target.clone().addScaledVector(VIEW_DIR, -dist);
-      cam.y += isTouch ? 0.6 : 0.2;
+      cam.y += (isTouch ? 0.35 : -0.05) - 1;
       return { target, cam };
     };
     const makeContact = (x: number, z: number) => {
       const y = groundHeight(x, z);
-      const dist = (isTouch ? 11.5 : 11.0) * 1.1; // +10% zoom out for contacts
-      const target = new THREE.Vector3(x, y + (isTouch ? 2.8 : 2.1), z).add(frameShift);
+      const dist = (isTouch ? 11.5 : 11.0) * 1.21 + inspectCamDistanceOffset; // zoom out for contacts
+      const target = new THREE.Vector3(x, y + (isTouch ? 3.9 : 3.2), z).add(frameShift); // aim higher
       const cam = target.clone().addScaledVector(VIEW_DIR, -dist);
-      cam.y += isTouch ? 0.6 : 0.3;
+      cam.y += (isTouch ? -0.2 : -0.45) - 1; // camera lower
       return { target, cam };
     };
     const makeHover = (x: number, z: number, hoverY: number) => {
-      const dist = (isTouch ? 11.5 : 11.0) * 1.1; // +10% zoom out for diploma
-      const target = new THREE.Vector3(x, hoverY, z).add(frameShift);
+      const dist = (isTouch ? 11.5 : 11.0) * 1.21 + inspectCamDistanceOffset; // zoom out for diploma
+      const target = new THREE.Vector3(x, hoverY + (isTouch ? 1.0 : 0.9), z).add(frameShift); // aim higher
       const cam = target.clone().addScaledVector(VIEW_DIR, -dist);
-      cam.y += isTouch ? 0.6 : 0.3;
+      cam.y += (isTouch ? -0.2 : -0.45) - 1; // camera lower
       return { target, cam };
     };
     return {
@@ -428,7 +460,7 @@ export default function FolioScene() {
       diploma: makeHover(DIPLOMA_POS.x, DIPLOMA_POS.z, groundHeight(DIPLOMA_POS.x, DIPLOMA_POS.z) + 2.2),
       linkedin: makeContact(LINKEDIN_POS.x, LINKEDIN_POS.z),
     };
-  }, [isTouch]);
+  }, [isTouch, inspectCamDistanceOffset]);
 
   /* ---- Tap-to-inspect handler for mobile (bypasses R3F pointer events, which are unreliable on touch) ---- */
   const MobileTapHandler = ({ pose }: { pose: MutableRefObject<CarPose> }) => {
@@ -742,6 +774,8 @@ export default function FolioScene() {
               />
               <RacingTrack showCurbs={showCurbs} night={night} withTerrain={true} pose={pose} />
               <Terrain />
+              <axesHelper args={[10]} position={[TRACK_START.x, TRACK_START.y + 0.05, TRACK_START.z]} />
+              <gridHelper args={[20, 20, "#ff4444", "#888888"]} position={[TRACK_START.x, TRACK_START.y + 0.02, TRACK_START.z]} />
               <ExampleModels />
               <ChessKnight
                 pose={pose}
@@ -833,8 +867,8 @@ export default function FolioScene() {
                 const totalRows = Math.ceil(arr.length / perRow);
                 const itemsInRow = row === totalRows - 1 ? arr.length - row * perRow : perRow;
                 const colOffset = col - (itemsInRow - 1) / 2; // centers last row when it has 2
-                const x = 26 - row * 7.2;
-                const z = 57 + colOffset * 3.3;
+                const x = 34 - row * 8.0;
+                const z = 57 + colOffset * 3.7;
                 const logoRotation: [number, number, number] = [0.017453, 0.872665, 0]; // X:1°, Y:50°, Z:0°
                 return (
                   <MovableLogo key={i} position={[x, 0, z]}>
@@ -869,18 +903,22 @@ export default function FolioScene() {
                 inspectCamPos={inspecting ? inspectViews[inspecting].cam : (lastInspected ? inspectViews[lastInspected].cam : undefined)}
                 freeCam={freeCam}
                 controlsRef={orbitControlsRef}
+                manualOverride={manualCamHold}
               />
               {freeCam && <FreeCamControls pose={pose} input={camKeys} controlsRef={orbitControlsRef} inspecting={!!inspecting} mobile={isTouch} />}
               <CameraDebugUpdater controlsRef={orbitControlsRef} posRef={camPosRef} dirRef={camDirRef} targetRef={camTargetRef} />
+              <CameraPositionApplier controlsRef={orbitControlsRef} position={camEdit} applyTick={camApplyTick} hold={manualCamHold} />
             </></PhysicsProvider>
           ) : (
             <>
               <ambientLight intensity={0.8} />
               <hemisphereLight args={["#ffffff", "#555555", 0.5]} />
               <directionalLight position={[4, 7, 5]} intensity={1.2} />
+              <axesHelper args={[5]} position={[0, 0.05, 0]} />
               <FolioCar key={carModel} color={color} keyboard={false} input={carLoaded ? input : emptyInput} smoke={smokeOn && carLoaded} carScale={1.7534} model={carModel} onReady={handleSceneReady} maxSpeed={24} />
               <OrbitControls ref={orbitControlsRef} target={[0, 1, 0]} minPolarAngle={0.15} maxPolarAngle={Math.PI / 2 - 0.08} />
               <CameraDebugUpdater controlsRef={orbitControlsRef} posRef={camPosRef} dirRef={camDirRef} targetRef={camTargetRef} />
+              <CameraPositionApplier controlsRef={orbitControlsRef} position={camEdit} applyTick={camApplyTick} hold={manualCamHold} />
             </>
           )}
         </Canvas>
@@ -1126,6 +1164,116 @@ export default function FolioScene() {
       {/* Loading overlay -- covers everything until the car is in the scene */}
       <LoadingScreen progress={loadProgress} visible={!sceneReady} />
 
+      {/* Inspect camera distance */}
+      <div
+        style={{
+          position: "fixed",
+          right: 12,
+          bottom: 170,
+          zIndex: 60,
+          background: "rgba(0,0,0,0.72)",
+          color: "#fff",
+          border: "1px solid rgba(255,255,255,0.2)",
+          borderRadius: 10,
+          padding: "10px 12px",
+          fontSize: 12,
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+          width: 320,
+          backdropFilter: "blur(6px)",
+        }}
+      >
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>Inspect camera distance</div>
+        <label style={{ display: "grid", gridTemplateColumns: "18px 1fr 72px", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <span>D</span>
+          <input
+            type="range"
+            min={-10}
+            max={20}
+            step={0.1}
+            value={inspectCamDistanceOffset}
+            onChange={(e) => setInspectCamDistanceOffset(Number(e.target.value))}
+          />
+          <input
+            type="number"
+            value={inspectCamDistanceOffset}
+            step={0.1}
+            onChange={(e) => setInspectCamDistanceOffset(Number(e.target.value))}
+            style={{ width: 72, background: "#111", color: "#fff", border: "1px solid #444", borderRadius: 4, padding: "2px 4px" }}
+          />
+        </label>
+        <div style={{ opacity: 0.85 }}>Controls camera distance from object/text in inspect view (works in inspect/key prompt view).</div>
+      </div>
+
+      {/* Camera XYZ controller */}
+      <div
+        style={{
+          position: "fixed",
+          right: 12,
+          bottom: 290,
+          zIndex: 60,
+          background: "rgba(0,0,0,0.72)",
+          color: "#fff",
+          border: "1px solid rgba(255,255,255,0.2)",
+          borderRadius: 10,
+          padding: "10px 12px",
+          fontSize: 12,
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+          width: 320,
+          backdropFilter: "blur(6px)",
+        }}
+      >
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>Camera XYZ controller</div>
+        {(["x", "y", "z"] as const).map((axis) => (
+          <label key={axis} style={{ display: "grid", gridTemplateColumns: "18px 1fr 72px", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <span>{axis.toUpperCase()}</span>
+            <input
+              type="range"
+              min={-200}
+              max={200}
+              step={0.1}
+              value={camEdit[axis]}
+              onChange={(e) => setCamEdit((p) => ({ ...p, [axis]: Number(e.target.value) }))}
+            />
+            <input
+              type="number"
+              value={camEdit[axis]}
+              step={0.1}
+              onChange={(e) => setCamEdit((p) => ({ ...p, [axis]: Number(e.target.value) }))}
+              style={{ width: 72, background: "#111", color: "#fff", border: "1px solid #444", borderRadius: 4, padding: "2px 4px" }}
+            />
+          </label>
+        ))}
+        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+          <button
+            onClick={() => { setManualCamHold(true); setCamApplyTick((t) => t + 1); }}
+            style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #555", background: manualCamHold ? "#2f5a2f" : "#1b1b1b", color: "#fff", cursor: "pointer", font: "inherit" }}
+          >
+            Apply & Hold
+          </button>
+          <button
+            onClick={() => setManualCamHold(false)}
+            style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #555", background: "#1b1b1b", color: "#fff", cursor: "pointer", font: "inherit" }}
+          >
+            Release
+          </button>
+          <button
+            onClick={() => {
+              const c = orbitControlsRef.current;
+              const cam = (c && c.object) ? c.object : null;
+              if (cam && (cam as any).position) {
+                setCamEdit({ x: (cam as any).position.x, y: (cam as any).position.y, z: (cam as any).position.z });
+              }
+            }}
+            style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #555", background: "#1b1b1b", color: "#fff", cursor: "pointer", font: "inherit" }}
+          >
+            Sync from live
+          </button>
+        </div>
+        <div style={{ marginTop: 6, opacity: 0.85, wordBreak: "break-all" }}>
+          {`[${camEdit.x.toFixed(2)}, ${camEdit.y.toFixed(2)}, ${camEdit.z.toFixed(2)}] ${manualCamHold ? "(manual hold)" : ""}`}
+        </div>
+      </div>
+
       {/* Live camera debug */}
       <div
         style={{
@@ -1149,6 +1297,10 @@ export default function FolioScene() {
         <div ref={camPosRef}>pos: [0.00, 0.00, 0.00]</div>
         <div ref={camDirRef}>dir: [0.000, 0.000, -1.000]</div>
         <div ref={camTargetRef}>target: [0.00, 0.00, 0.00]</div>
+        <div style={{ marginTop: 8, borderTop: "1px solid rgba(255,255,255,0.15)", paddingTop: 6 }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Axes</div>
+          <div><span style={{ color: "#ff5555", fontWeight: 700 }}>X</span> = red, <span style={{ color: "#55ff55", fontWeight: 700 }}>Y</span> = green, <span style={{ color: "#5599ff", fontWeight: 700 }}>Z</span> = blue</div>
+        </div>
       </div>
 
       {/* Temporary model rotation debug controls (LinkedIn) */}

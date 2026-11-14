@@ -709,6 +709,7 @@ export function FolioTopDownCam({
   inspectCamPos,
   freeCam = false,
   controlsRef,
+  manualOverride = false,
 }: {
   pose: MutableRefObject<CarPose>;
   zoomMultiplier?: number;
@@ -721,6 +722,8 @@ export function FolioTopDownCam({
   freeCam?: boolean;
   /** OrbitControls ref so we can save/restore camera target when entering/exiting inspection from free cam. */
   controlsRef?: MutableRefObject<any>;
+  /** When true, skip automatic camera positioning (for manual XYZ edits, including during inspect). */
+  manualOverride?: boolean;
 }) {
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
@@ -751,6 +754,14 @@ export function FolioTopDownCam({
     const dt = Math.min(delta, 0.05);
     const p = pose.current;
     const s = st.current;
+
+    if (manualOverride) {
+      s.wasFree = true;
+      s.returning = false;
+      s.wasInspecting = false;
+      s.inspectAlpha = 0;
+      return;
+    }
 
     // Smoothly blend inspection alpha (0 = normal driving, 1 = inspecting)
     const targetAlpha = inspecting && inspectTarget && inspectCamPos ? 1 : 0;

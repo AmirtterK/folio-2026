@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { groundHeight } from "@/components/Terrain";
 import type { CarPose } from "@/components/FolioCar";
-import { NEURAL_POS } from "@/components/landmarkConfig";
+import { NEURAL_POS, KEY_PROMPT_OFFSET_FROM_HOLOGRAM } from "@/components/landmarkConfig";
 import HolographicMaterial, { type HolographicMaterialProps } from "@/components/HolographicMaterial";
 import HologramBase, { HOLO_COLOR, LANDMARK_BASE_SIZE } from "@/components/HologramBase";
 import HoloText from "@/components/HoloText";
@@ -299,6 +299,13 @@ export default function NeuralNetworkHologram({
   });
 
   const holo = { hologramColor: HOLO_COLOR, hologramBrightness: 1.3, scanlineSize: 8, enableAdditive: night, ...hologram };
+  const holoAnchor: [number, number, number] = [1.2, 0, 1.0];
+  const promptPos: [number, number, number] = [
+    holoAnchor[0] + KEY_PROMPT_OFFSET_FROM_HOLOGRAM[0],
+    holoAnchor[1] + KEY_PROMPT_OFFSET_FROM_HOLOGRAM[1],
+    holoAnchor[2] + KEY_PROMPT_OFFSET_FROM_HOLOGRAM[2],
+  ];
+  const textY = promptPos[1] - (0.9 + NEURAL_LINES.length * 0.16);
 
   return (
     <group position={[NEURAL_POS.x, y, NEURAL_POS.z]} rotation={[0, (Math.PI * 50) / 180, 0]}>
@@ -333,15 +340,17 @@ export default function NeuralNetworkHologram({
           />
         </group>
 
-        {/* Neural Flows as free-floating holographic writing, revealed while inspecting */}
-        <HoloText lines={NEURAL_LINES} active={inspecting} night={night} mobile={touch} />
+        {/* Holographic writing revealed at the key prompt position while inspecting */}
+        <group position={[promptPos[0], textY, promptPos[2]]}>
+          <HoloText lines={NEURAL_LINES} active={inspecting} night={night} mobile={touch} />
+        </group>
 
         {/* Floating prompt: a quiet orb that becomes an Enter key (or a tap gesture on touch) as the car pulls up */}
         <HoloKeyPrompt
           active={isNear}
           visible={!inspecting}
           onActivate={() => onInspectToggle(true)}
-          position={[2.5, 1.9, 0]}
+          position={promptPos}
           night={night}
           touch={touch}
         />

@@ -8,7 +8,7 @@ import { useFrame } from "@react-three/fiber";
 import { useTexture } from "@react-three/drei";
 import { groundHeight } from "@/components/Terrain";
 import type { CarPose } from "@/components/FolioCar";
-import { DIPLOMA_POS } from "@/components/landmarkConfig";
+import { DIPLOMA_POS, KEY_PROMPT_OFFSET_FROM_HOLOGRAM } from "@/components/landmarkConfig";
 import HoloText from "@/components/HoloText";
 import HoloKeyPrompt from "@/components/HoloKeyPrompt";
 import { DIPLOMA_LINES } from "@/components/landmarkProjects";
@@ -27,6 +27,8 @@ type DiplomaLandmarkProps = {
   touch?: boolean;
   /** Temporary debug rotation override (radians) */
   debugRotation?: { x: number; y: number; z: number };
+  /** Optional debug override for key prompt position (x,y,z) */
+  promptPosition?: [number, number, number];
 };
 
 export default function DiplomaLandmark({
@@ -37,6 +39,7 @@ export default function DiplomaLandmark({
   night = true,
   touch = false,
   debugRotation,
+  promptPosition,
 }: DiplomaLandmarkProps) {
   const [isNear, setIsNear] = useState(false);
   const isNearRef = useRef(false);
@@ -78,39 +81,50 @@ export default function DiplomaLandmark({
 
   const rot = debugRotation ?? { x: 0, y: (Math.PI * 50) / 180, z: 0 };
 
+  const holoAnchor: [number, number, number] = [w * 0.6 + 1.8, -1.0, 0.0];
+  const promptPos: [number, number, number] = promptPosition ?? [
+    holoAnchor[0] + KEY_PROMPT_OFFSET_FROM_HOLOGRAM[0],
+    holoAnchor[1] + KEY_PROMPT_OFFSET_FROM_HOLOGRAM[1],
+    holoAnchor[2] + KEY_PROMPT_OFFSET_FROM_HOLOGRAM[2],
+  ];
+  const textY = promptPos[1] - (0.5 + DIPLOMA_LINES.length * 0.13);
+
   return (
-    <group ref={groupRef} position={[DIPLOMA_POS.x, baseY, DIPLOMA_POS.z]} rotation={[rot.x, rot.y, rot.z]}>
-      {/* Interaction hit area */}
-      <mesh
-        position={[0, 0, 0]}
-        userData={{ landmark: "diploma" }}
-        onClick={(e) => {
-          if (isNear && !inspecting) {
-            e.stopPropagation();
-            onInspectToggle(true);
-          }
-        }}
-      >
-        <boxGeometry args={[Math.max(w + 0.8, 2.6), h + 0.8, 1.0]} />
-        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-      </mesh>
+    <group ref={groupRef} position={[DIPLOMA_POS.x, baseY, DIPLOMA_POS.z]}>
+      {/* Rotated diploma model + hit area */}
+      <group rotation={[rot.x, rot.y, rot.z]}>
+        <mesh
+          position={[0, 0, 0]}
+          userData={{ landmark: "diploma" }}
+          onClick={(e) => {
+            if (isNear && !inspecting) {
+              e.stopPropagation();
+              onInspectToggle(true);
+            }
+          }}
+        >
+          <boxGeometry args={[Math.max(w + 0.8, 2.6), h + 0.8, 1.0]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+        <mesh
+          position={[0, 0, 0]}
+          material={materials}
+          castShadow
+          receiveShadow
+        >
+          <boxGeometry args={[w, h, THICK]} />
+        </mesh>
+      </group>
 
-      {/* thick diploma (hovering, no pole) */}
-      <mesh
-        position={[0, 0, 0]}
-        material={materials}
-        castShadow
-        receiveShadow
-      >
-        <boxGeometry args={[w, h, THICK]} />
-      </mesh>
-
-      <HoloText lines={DIPLOMA_LINES} active={inspecting} night={night} mobile={touch} />
+      {/* Text/prompt in world-aligned space (bobs with diploma) so it stays next to it, not behind */}
+      <group position={[promptPos[0], textY, promptPos[2]]}>
+        <HoloText lines={DIPLOMA_LINES} active={inspecting} night={night} mobile={touch} />
+      </group>
       <HoloKeyPrompt
         active={isNear}
         visible={!inspecting}
         onActivate={() => onInspectToggle(true)}
-        position={[Math.max(w * 0.5 + 0.4, 1.6), 0.6, 0]}
+        position={promptPos}
         night={night}
         touch={touch}
       />

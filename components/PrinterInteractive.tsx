@@ -7,7 +7,7 @@ import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { groundHeight } from "@/components/Terrain";
 import type { CarPose } from "@/components/FolioCar";
-import { PRINTER_POS } from "@/components/landmarkConfig";
+import { PRINTER_POS, KEY_PROMPT_OFFSET_FROM_HOLOGRAM } from "@/components/landmarkConfig";
 import HoloText from "@/components/HoloText";
 import HoloKeyPrompt from "@/components/HoloKeyPrompt";
 import { PRINTER_LINES } from "@/components/landmarkProjects";
@@ -73,6 +73,14 @@ export default function PrinterInteractive({
     }
   });
 
+  const holoAnchor: [number, number, number] = [2.6, 0.5, 0];
+  const promptPos: [number, number, number] = [
+    holoAnchor[0] + KEY_PROMPT_OFFSET_FROM_HOLOGRAM[0],
+    holoAnchor[1] + KEY_PROMPT_OFFSET_FROM_HOLOGRAM[1],
+    holoAnchor[2] + KEY_PROMPT_OFFSET_FROM_HOLOGRAM[2],
+  ];
+  const textY = promptPos[1] - (0.7 + PRINTER_LINES.length * 0.16);
+
   return (
     <group position={[PRINTER_POS.x, y, PRINTER_POS.z]}>
       {/* Interaction hit area next to the model */}
@@ -93,15 +101,15 @@ export default function PrinterInteractive({
       {/* Plain printer model (2.5x, grounded/centered), no hologram base */}
       <primitive object={model} />
 
-      {/* Inspect UI: prompt + text/link (interaction logic) */}
-      <group position={[2.6, 0.5, 0]}>
+      {/* Inspect UI: prompt + text/link (interaction logic), text revealed at key position */}
+      <group position={[promptPos[0], textY, promptPos[2]]}>
         <HoloText lines={PRINTER_LINES} active={inspecting} night={night} mobile={touch} />
       </group>
       <HoloKeyPrompt
         active={isNear}
         visible={!inspecting}
         onActivate={() => onInspectToggle(true)}
-        position={[1.8, 3.0, 0]}
+        position={promptPos}
         night={night}
         touch={touch}
       />

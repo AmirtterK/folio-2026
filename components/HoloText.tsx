@@ -32,6 +32,8 @@ type HoloTextProps = {
   night?: boolean;
   /** Mobile portrait: stack the text above the hologram instead of beside it. */
   mobile?: boolean;
+  /** Fixed facing rotation for each text line. When omitted, lines billboard to face the camera. */
+  rotation?: [number, number, number];
 };
 
 function setSpacing(ctx: CanvasRenderingContext2D, px: number) {
@@ -94,10 +96,12 @@ function createHoloTextTexture(spec: HoloLineSpec) {
   return { tex, planeW, planeH: (planeW * h) / w };
 }
 
-/** A column of free-floating holographic lines that billboard toward the camera and ease in when active. */
-export default function HoloText({ lines, active, night = true, mobile = false }: HoloTextProps) {
+/** A column of free-floating holographic lines that ease in when active. Faces camera by default, or uses a fixed rotation when provided. */
+export default function HoloText({ lines, active, night = true, mobile = false, rotation }: HoloTextProps) {
   const reveal = useRef(0);
   const refs = useRef<(THREE.Group | null)[]>([]);
+  const worldQuat = useRef(new THREE.Quaternion());
+  const parentWorldQuat = useRef(new THREE.Quaternion());
 
   // On mobile portrait, stack the writing above the hologram instead of beside it.
   const adjustedLines = useMemo(() => {
@@ -153,7 +157,17 @@ export default function HoloText({ lines, active, night = true, mobile = false }
       const eased = 1 - Math.pow(1 - e, 3);
       g.visible = e > 0.01;
       if (!g.visible) return;
-      g.quaternion.copy(state.camera.quaternion);
+      if (rotation) {
+        g.rotation.set(rotation[0], rotation[1], rotation[2]);
+      } else {
+        // Billboard in world space, accounting for rotated parents (e.g. hologram landmarks)
+        worldQuat.current.copy(state.camera.quaternion);
+        if (g.parent) {
+          g.parent.getWorldQuaternion(parentWorldQuat.current);
+          worldQuat.current.premultiply(parentWorldQuat.current.invert());
+        }
+        g.quaternion.copy(worldQuat.current);
+      }
       g.scale.setScalar(0.88 + 0.12 * eased);
       g.position.set(line.spec.x, line.spec.y + Math.sin(t * 0.9 + i * 1.7) * 0.004, line.spec.z);
       line.mat.opacity = eased * flick * 0.95;

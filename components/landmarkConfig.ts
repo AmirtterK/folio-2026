@@ -1,13 +1,13 @@
-/** Milestones along the main straight (road centre ~ z 56), placed sequentially after each other */
+/** Project holograms - in the middle off-road area like contacts */
 export const NEURAL_POS = {
-  x: -40,
-  z: 56,
+  x: 22,
+  z: 35,
 };
 
-/** Holographic chess knight milestone, after neural network */
+/** Holographic chess knight - in the middle off-road area like contacts */
 export const KNIGHT_POS = {
-  x: -58,
-  z: 56,
+  x: 38,
+  z: 35,
   yaw: Math.PI,
 };
 
@@ -23,9 +23,9 @@ export const GMAIL_POS = {
   z: 35,
 };
 
-/** Diploma - before the LinkedIn object, off the track */
+/** Diploma - in the middle off-road area near other landmarks */
 export const DIPLOMA_POS = {
-  x: 60,
+  x: 54,
   z: 35,
   rotY: 0,
 };
@@ -35,3 +35,11 @@ export const LINKEDIN_POS = {
   x: 6,
   z: 35,
 };
+
+/**
+ * Chess (reference): key prompt relative to hologram/text anchor.
+ * Chess anchor (HoloText group): [1.4, 0, 1.0], key prompt: [1.65, 1.95, -1.2]
+ * Offset = key - anchor = [0.25, 1.95, -2.2], distance ~= 2.951.
+ * Key/text prompts billboard to face the camera.
+ */
+export const KEY_PROMPT_OFFSET_FROM_HOLOGRAM = [0.25, 1.95, -2.2] as const;

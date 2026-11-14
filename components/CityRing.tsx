@@ -85,7 +85,9 @@ function mirrorGeometry(g: THREE.BufferGeometry, axis: "x" | "z"): THREE.BufferG
  */
 function prepare(scene: THREE.Object3D, def: SourceDef): Prepared {
   scene.updateWorldMatrix(true, true);
-  const box = new THREE.Box3().setFromObject(scene);
+  // precise = true: measure the real vertices. The default box only transforms each mesh's own bounding box by its node matrix, which
+  // blows up for rotated nodes (the cyberpunk row came out as y -16.7..25.6 instead of 1.02..8.18, so it was lifted ~15 units off the ground).
+  const box = new THREE.Box3().setFromObject(scene, true);
   const size = box.getSize(new THREE.Vector3());
   const c = box.getCenter(new THREE.Vector3());
   const base = new THREE.Matrix4().makeTranslation(-c.x, -box.min.y, -c.z);

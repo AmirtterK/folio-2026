@@ -366,7 +366,7 @@ export default function FolioScene() {
   const [camEdit, setCamEdit] = useState({ x: 20, y: 26, z: 20 });
   const [camApplyTick, setCamApplyTick] = useState(0);
   const [manualCamHold, setManualCamHold] = useState(false);
-  const [inspectCamDistanceOffset, setInspectCamDistanceOffset] = useState(2);
+  const [inspectCamDistanceOffset, setInspectCamDistanceOffset] = useState(4.8);
   const camPosRef = useRef<HTMLDivElement>(null);
   const camDirRef = useRef<HTMLDivElement>(null);
   const camTargetRef = useRef<HTMLDivElement>(null);

@@ -1,12 +1,12 @@
-/** Project holograms - in the middle off-road area like contacts */
+/** Project holograms - in front of the start line, off-road */
 export const NEURAL_POS = {
-  x: 22,
+  x: -22,
   z: 35,
 };
 
-/** Holographic chess knight - in the middle off-road area like contacts */
+/** Holographic chess knight - in front of the start line, off-road */
 export const KNIGHT_POS = {
-  x: 38,
+  x: -38,
   z: 35,
   yaw: Math.PI,
 };
@@ -23,9 +23,9 @@ export const GMAIL_POS = {
   z: 35,
 };
 
-/** Diploma - in the middle off-road area near other landmarks */
+/** Diploma - in front of the start line, off-road */
 export const DIPLOMA_POS = {
-  x: 54,
+  x: -6,
   z: 35,
   rotY: 0,
 };

@@ -121,7 +121,7 @@ export default function HoloText({ lines, active, night = true, mobile = false, 
         blending: night ? THREE.AdditiveBlending : THREE.NormalBlending,
         opacity: 0,
       });
-      const geo = new THREE.PlaneGeometry(planeW, planeH);
+      const geo = new THREE.PlaneGeometry(planeW * 1.15, planeH * 1.15);
       return { spec, tex, mat, geo };
     });
   }, [adjustedLines, night]);

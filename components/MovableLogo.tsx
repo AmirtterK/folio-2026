@@ -6,7 +6,7 @@ import { useFrame } from "@react-three/fiber";
 import RAPIER from "@dimforge/rapier3d-compat";
 import type { ReactNode } from "react";
 import { groundHeight } from "@/components/Terrain";
-import { usePhysics } from "@/components/PhysicsProvider";
+import { usePhysics, isWorldFreed } from "@/components/PhysicsProvider";
 
 type MovableLogoProps = {
   position: [number, number, number];
@@ -20,7 +20,7 @@ export default function MovableLogo({ position, children }: MovableLogoProps) {
   const idRef = useRef(Math.random().toString(36).slice(2));
 
   useEffect(() => {
-    if (!world) return;
+    if (!world || isWorldFreed(world)) return;
     const body = world.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic()
         .setTranslation(position[0], groundHeight(position[0], position[2]) + 2.0, position[2])
@@ -31,9 +31,15 @@ export default function MovableLogo({ position, children }: MovableLogoProps) {
     bodyRef.current = body;
     registerLogo(idRef.current, body);
     return () => {
-      if (bodyRef.current) {
-        world.removeRigidBody(bodyRef.current);
-        bodyRef.current = null;
+      const b = bodyRef.current;
+      bodyRef.current = null;
+      // the provider frees the world before its children clean up: never touch a freed world (it traps the WASM)
+      if (b && !isWorldFreed(world)) {
+        try {
+          world.removeRigidBody(b);
+        } catch {
+          /* world already gone */
+        }
       }
       unregisterLogo(idRef.current);
     };
@@ -44,6 +50,10 @@ export default function MovableLogo({ position, children }: MovableLogoProps) {
     const body = bodyRef.current;
     const g = ref.current;
     if (!body || !g) return;
+    if (isWorldFreed(world)) {
+      bodyRef.current = null; // body belongs to a freed world (HMR / remount): stop touching it
+      return;
+    }
     const t = body.translation();
     const r = body.rotation();
     // slow falldown: apply downward impulse so pushed logos settle

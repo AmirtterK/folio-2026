@@ -10,8 +10,9 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
  * Hand gestures -> fixed camera control (rotate only)
  *
  *   POINT  (index out, middle/ring/pinky folded)  + move   => rotate/orbit (drag feel: the scene follows your hand)
+ *   PINCH  (middle/ring/pinky folded, thumb + index)       => zoom, touchscreen style: the aperture when the gesture
+ *          starts is the anchor; spreading thumb/index zooms in, closing them zooms out (1:1, proportional)
  *   anything else                                          => nothing happens
- * (Zoom/pinch disabled: camera position/distance stays locked)
  *
  * Design notes (why it is built this way):
  *  - Poses are classified from MediaPipe *world* landmarks (metric 3D), using joint bend angles, so the result
@@ -52,16 +53,28 @@ const STALE_MS = 160; // no fresh detection this long => stop driving the camera
 // Motion mapping
 const YAW_GAIN = 4.0; // rad of orbit per full video width of hand travel
 const PITCH_GAIN = 3.0; // rad of tilt per full video width of hand travel
-// Zoom dial (thumb tip to index tip distance / hand size)
-const ZOOM_RATE = 1.0; // ln(distance) per second at full dial
-const ZOOM_CLOSED = 0.6; // below this the pinch counts as closed => zoom out
-const ZOOM_OPEN = 0.78; // above this the fingers count as spread => zoom in
+// Pinch zoom (thumb tip to index tip distance / hand size = "aperture"), touchscreen style:
+// the aperture when the gesture starts is the anchor; spreading from it zooms in, closing it zooms out.
+const ZOOM_GAIN = 1.0; // camera distance = anchorDistance * (anchorAperture / aperture) ^ ZOOM_GAIN
+const ZOOM_SETTLE_MS = 150; // after entering zoom wait this long before taking the anchor (hand is still forming the shape)
+const ZOOM_MIN_APERTURE = 0.12; // floor so a fully closed pinch cannot blow up the ratio
 const ZOOM_MAX_APERTURE = 2.2; // wider than this and it is no longer a zoom gesture
+const ZOOM_MAX_LOG = 1.6; // max |ln(distance change)| from the anchor in one gesture (~5x)
+const ZOOM_FOLLOW = 6; // 1/s, how hard the camera chases the pinch target
+const ZOOM_MAX_SPEED = 3; // max ln(distance) per second
+const ZOOM_EPS = 0.008; // ignore remaining error below this
+// Non-stop zoom: keep the pinch spread (or closed) well past the anchor and the camera keeps zooming on its own,
+// accumulating across repeated pinches, until it hits the controls' min/max distance.
+const ZOOM_DRIFT_START = 0.8; // |ln(aperture / anchor)| beyond this starts the continuous zoom (~2.2x spread / ~0.45x close)
+const ZOOM_DRIFT_FULL = 0.7; // ...and reaches full drift speed this much further out
+const ZOOM_DRIFT_RATE = 1.2; // ln(distance) per second at full drift
 const DEADZONE = 0.03; // ignore hand speeds below this (video widths per second): kills jitter drift
 const MAX_ANG_SPEED = 5; // rad/s
 // Thumb sticking out (thumb tip to index knuckle / hand size), used to tell a zoom spread from a pointing hand
-const THUMB_OUT_ON = 0.55;
-const THUMB_OUT_OFF = 0.4;
+const THUMB_OUT_ON = 0.65;
+const THUMB_OUT_OFF = 0.45;
+const INDEX_FIST_BEND = 95; // index bend (deg) above this = curled into a fist, never a pinch
+const SWITCH_MS = 90; // switching directly between rotate and zoom needs this much stability
 const FOLLOW_TAU = 0.06; // s, how quickly camera speed follows the hand while a gesture is held
 const INERTIA_TAU = 0.35; // s, glide after releasing a gesture
 
@@ -282,7 +295,11 @@ export default function HandGesturesCamera({ controlsRef, enabled }: HandGesture
       const fingerExt = [false, false, false, false]; // index, middle, ring, pinky (hysteresis state)
       let pinchOn = false;
       let thumbOut = false;
-      let zoomBase = -1; // how many of middle/ring/pinky were out when the pinch started
+      let zoomSince = 0; // when zoom mode was entered
+      let zoomAnchorAperture = -1; // aperture at the start of the pinch (-1 = not taken yet)
+      let zoomAnchorLog = 0; // ln(camera distance) at the start of the pinch
+      let zoomTarget: number | null = null; // ln(camera distance) the pinch is asking for
+      let zoomDrift = 0; // accumulated continuous-zoom offset (ln distance) for this gesture
       let rawPose: Pose = "none";
       let pose: Pose = "none"; // debounced
       let cand: Pose = "none";
@@ -297,7 +314,7 @@ export default function HandGesturesCamera({ controlsRef, enabled }: HandGesture
 
       const fx = new OneEuro();
       const fy = new OneEuro();
-      const fr = new OneEuro(1.5, 2); // smooths the pinch aperture
+      const fr = new OneEuro(1.2, 3); // smooths the pinch aperture
       let prevX: number | null = null;
       let prevY = 0;
       let prevT = 0;
@@ -326,14 +343,19 @@ export default function HandGesturesCamera({ controlsRef, enabled }: HandGesture
         }
       };
 
-      const setMode = (m: Mode) => {
+      const setMode = (m: Mode, now: number) => {
         if (m === mode) return;
+        if (mode === "zoom") wZoom = 0; // no glide after a pinch: it stops where you stop
         mode = m;
         fx.reset();
         fy.reset();
         fr.reset();
         prevX = null;
         tYaw = tPitch = tZoom = 0;
+        zoomTarget = null;
+        zoomAnchorAperture = -1;
+        zoomDrift = 0;
+        zoomSince = now;
       };
 
       const updatePose = (raw: Pose, now: number) => {
@@ -346,8 +368,8 @@ export default function HandGesturesCamera({ controlsRef, enabled }: HandGesture
           candSince = now;
           return;
         }
-        // start gestures immediately; only debounce dropping to none
-        const delay = raw === "none" ? EXIT_MS : 0;
+        // start from idle immediately; dropping to none and switching between gestures are debounced
+        const delay = raw === "none" ? EXIT_MS : pose === "none" ? 0 : SWITCH_MS;
         if (now - candSince >= delay) pose = raw;
       };
 
@@ -385,7 +407,7 @@ export default function HandGesturesCamera({ controlsRef, enabled }: HandGesture
           hasHand = false;
           pose = cand = rawPose = "none";
           pinchOn = false;
-          setMode("idle");
+          setMode("idle", now);
         }
         setBadge();
       };
@@ -408,16 +430,19 @@ export default function HandGesturesCamera({ controlsRef, enabled }: HandGesture
         thumbOut = thumbOut ? thumbRatio > THUMB_OUT_OFF : thumbRatio > THUMB_OUT_ON;
 
         const others = (fingerExt[1] ? 1 : 0) + (fingerExt[2] ? 1 : 0) + (fingerExt[3] ? 1 : 0);
-        const pointing = fingerExt[0] && others === 0; // index out, rest folded (thumb ignored)
-        // Pinch/spread (thumb-index aperture) to zoom: middle/ring/pinky folded, not pointing
-        const zoomGesture = !pointing && others === 0 && pinchRatio < ZOOM_MAX_APERTURE;
+        const indexBend = bendDeg(world, 5, 6, 8);
+        // ZOOM: middle/ring/pinky folded, index not curled into a fist, and the thumb is either clearly out or
+        //       touching the index tip (works from a closed pinch AND from an open, spread thumb+index).
+        // POINT: index out, thumb tucked, the rest folded.
+        const zoomGesture =
+          others === 0 && indexBend < INDEX_FIST_BEND && (thumbOut || pinchOn) && pinchRatio < ZOOM_MAX_APERTURE;
+        const pointing = !zoomGesture && fingerExt[0] && others === 0;
 
-        rawPose = pointing ? "point" : zoomGesture ? "zoom" : "none";
+        rawPose = zoomGesture ? "zoom" : pointing ? "point" : "none";
         updatePose(rawPose, now);
-        // respond immediately based on detected pose
-        setMode(rawPose === "point" ? "rotate" : rawPose === "zoom" ? "zoom" : pose === "point" ? "rotate" : pose === "zoom" ? "zoom" : "idle");
+        setMode(pose === "point" ? "rotate" : pose === "zoom" ? "zoom" : "idle", now);
 
-        if (rawPose === "point") {
+        if (mode === "rotate") {
           const t = now / 1000;
           const sx = fx.filter(lm[8].x, t);
           const sy = fy.filter(lm[8].y, t);
@@ -433,15 +458,35 @@ export default function HandGesturesCamera({ controlsRef, enabled }: HandGesture
           prevX = sx;
           prevY = sy;
           prevT = t;
-        } else if (rawPose === "zoom") {
+        } else if (mode === "zoom") {
           const t = now / 1000;
-          const aperture = fr.filter(pinchRatio, t);
-          // pinch close (smaller aperture) => zoom out, spread (larger aperture) => zoom in
-          if (aperture < ZOOM_CLOSED) tZoom = ZOOM_RATE;
-          else if (aperture > ZOOM_OPEN) tZoom = -ZOOM_RATE;
-          else tZoom = 0;
-          tYaw = 0;
-          tPitch = 0;
+          const aperture = Math.max(ZOOM_MIN_APERTURE, fr.filter(pinchRatio, t));
+          const controls = controlsRef.current;
+          if (controls && now - zoomSince >= ZOOM_SETTLE_MS) {
+            const curLog = Math.log(controls.object.position.distanceTo(controls.target));
+            const hadAnchor = zoomAnchorAperture >= 0;
+            if (!hadAnchor) {
+              zoomAnchorAperture = aperture;
+              zoomAnchorLog = curLog;
+            }
+            // spread (aperture grows) => distance shrinks => zoom in; pinch closed => zoom out
+            const d = Math.log(aperture / zoomAnchorAperture); // + = spread, - = closed
+            const delta = clamp(-ZOOM_GAIN * d, -ZOOM_MAX_LOG, ZOOM_MAX_LOG);
+            // held far past the anchor => keep zooming non-stop (accumulates over repeated pinches)
+            if (hadAnchor) {
+              const dt = clamp(t - prevT, 0, 0.1);
+              const over = clamp((Math.abs(d) - ZOOM_DRIFT_START) / ZOOM_DRIFT_FULL, 0, 1);
+              zoomDrift -= Math.sign(d) * over * ZOOM_DRIFT_RATE * dt;
+            }
+            // stay inside the camera's distance limits so nothing winds up past the boundary
+            const lo = Math.log(Math.max(controls.minDistance || 0, 1e-3));
+            const hi = Number.isFinite(controls.maxDistance) ? Math.log(controls.maxDistance) : Infinity;
+            zoomTarget = clamp(zoomAnchorLog + delta + zoomDrift, lo, hi);
+            zoomDrift = zoomTarget - zoomAnchorLog - delta;
+          } else {
+            zoomTarget = null;
+          }
+          tYaw = tPitch = 0;
           prevX = null;
           prevT = t;
         } else {
@@ -514,7 +559,18 @@ export default function HandGesturesCamera({ controlsRef, enabled }: HandGesture
 
           // stale detections (stalled camera, tab throttled...) must not keep driving the camera
           const driving = mode !== "idle" && hasHand && now - lastDetect <= STALE_MS;
-          if (!driving) tYaw = tPitch = tZoom = 0;
+          if (!driving) {
+            tYaw = tPitch = tZoom = 0;
+            zoomTarget = null;
+          }
+          // pinch zoom: chase the target distance every render frame (smooth, no overshoot between detections)
+          if (driving && mode === "zoom" && zoomTarget !== null) {
+            const c = controlsRef.current;
+            if (c) {
+              const err = zoomTarget - Math.log(c.object.position.distanceTo(c.target));
+              tZoom = Math.abs(err) < ZOOM_EPS ? 0 : clamp(err * ZOOM_FOLLOW, -ZOOM_MAX_SPEED, ZOOM_MAX_SPEED);
+            }
+          }
 
           // ease the applied speed toward the hand's speed; glide (slower decay) once the gesture is released
           const k = 1 - Math.exp(-dt / (driving ? FOLLOW_TAU : INERTIA_TAU));
@@ -626,7 +682,7 @@ export default function HandGesturesCamera({ controlsRef, enabled }: HandGesture
               pointerEvents: "none",
             }}
           >
-            Point index (thumb tucked) + move = rotate · Thumb+index pinch/spread, other fingers folded = zoom
+            Point index (thumb tucked) + move = rotate · Thumb+index out, other fingers folded: spread = zoom in, pinch = zoom out
           </div>
         </>
       )}

@@ -27,6 +27,13 @@ export function usePhysics() {
   return useContext(PhysicsContext);
 }
 
+// Worlds that have been freed. Touching a freed Rapier world/body (or one of its bodies) traps inside the WASM
+// ("RuntimeError: unreachable") and leaves the module corrupted, so consumers must check this before every call.
+const freedWorlds = new WeakSet<object>();
+export function isWorldFreed(world: RAPIER.World | null | undefined) {
+  return !world || freedWorlds.has(world);
+}
+
 export function PhysicsProvider({
   pose,
   children,
@@ -62,6 +69,7 @@ export function PhysicsProvider({
       carBodyRef.current = null;
       logoBodiesRef.current.clear();
       if (world) {
+        freedWorlds.add(world);
         try {
           world.free();
         } catch {

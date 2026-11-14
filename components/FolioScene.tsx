@@ -175,6 +175,127 @@ function FreeCamControls({
   );
 }
 
+/* ---------- Day / night cycle ---------- */
+
+const DAY_NIGHT_PERIOD_MS = 120_000; // the scene flips between night and day every 2 minutes
+const DAY_NIGHT_TRANSITION_MS = 9_000; // length of the sunset / sunrise blend
+
+/** mix: 0 = full day, 1 = full night. Lives in a ref owned by FolioScene so the clock survives view switches. */
+type DayCycle = { target: 0 | 1; from: number; mix: number; startedAt: number; nextAt: number };
+
+const col = (hex: string) => new THREE.Color(hex);
+const PAL = {
+  bg: [col("#cbe2f2"), col("#f0a779"), col("#0a1238")], // day, dusk/dawn, night
+  fog: [col("#cbe2f2"), col("#e9a57d"), col("#0c1747")],
+  sun: [col("#ffffff"), col("#ffb06e"), col("#c9d8ff")],
+  ambient: [col("#ffffff"), col("#ffd9c0"), col("#6a78d8")],
+  hemiSky: [col("#dbe9f6"), col("#f2b896"), col("#6f86d6")],
+  hemiGround: [col("#739855"), col("#6b6a48"), col("#14182b")],
+};
+
+/** day -> dusk -> night colour ramp (dusk only shows up mid-transition) */
+function ramp(c: THREE.Color[], m: number, out: THREE.Color) {
+  if (m < 0.5) return out.copy(c[0]).lerp(c[1], m * 2);
+  return out.copy(c[1]).lerp(c[2], (m - 0.5) * 2);
+}
+
+function DayNightRig({
+  cycleRef,
+  freeCam,
+  onNightChange,
+  rootRef,
+  ambRef,
+  hemiRef,
+  sunRef,
+}: {
+  cycleRef: MutableRefObject<DayCycle>;
+  freeCam: boolean;
+  onNightChange: (night: boolean) => void;
+  rootRef: MutableRefObject<HTMLDivElement | null>;
+  ambRef: MutableRefObject<THREE.AmbientLight | null>;
+  hemiRef: MutableRefObject<THREE.HemisphereLight | null>;
+  sunRef: MutableRefObject<THREE.DirectionalLight | null>;
+}) {
+  const { scene } = useThree();
+  const tmp = useMemo(() => new THREE.Color(), []);
+  const bg = useMemo(() => new THREE.Color(), []);
+  const fog = useMemo(() => new THREE.Fog("#0c1747", 150, 780), []);
+  const lastNight = useRef<boolean | null>(null);
+
+  const apply = useCallback(
+    (m: number) => {
+      ramp(PAL.bg, m, bg);
+      scene.background = bg;
+      if (rootRef.current) rootRef.current.style.backgroundColor = `#${bg.getHexString()}`;
+
+      scene.fog = fog;
+      ramp(PAL.fog, m, fog.color);
+      fog.near = freeCam ? 250 + (150 - 250) * m : 80 + (35 - 80) * m;
+      fog.far = freeCam ? 780 : 420 + (230 - 420) * m;
+
+      const dip = Math.sin(Math.PI * m); // 0 at full day/night, 1 at the horizon moment
+      const amb = ambRef.current;
+      if (amb) {
+        amb.intensity = 0.7 + (0.45 - 0.7) * m;
+        ramp(PAL.ambient, m, amb.color);
+      }
+      const hemi = hemiRef.current;
+      if (hemi) {
+        hemi.intensity = 0.55 + (0.45 - 0.55) * m;
+        ramp(PAL.hemiSky, m, hemi.color);
+        ramp(PAL.hemiGround, m, hemi.groundColor);
+      }
+      const sun = sunRef.current;
+      if (sun) {
+        // the key light swings from the sun position to the moon position and sinks toward the horizon in between
+        sun.position.set(40, 75 + (90 - 75) * m - 28 * dip, 30 + (-30 - 30) * m);
+        sun.intensity = (1.35 + (0.85 - 1.35) * m) * (1 - 0.3 * dip);
+        ramp(PAL.sun, m, tmp);
+        sun.color.copy(tmp);
+      }
+    },
+    [scene, bg, fog, tmp, freeCam, rootRef, ambRef, hemiRef, sunRef]
+  );
+
+  useEffect(() => {
+    apply(cycleRef.current.mix);
+    return () => {
+      scene.background = null;
+      scene.fog = null;
+    };
+  }, [apply, cycleRef, scene]);
+
+  useFrame(() => {
+    const cyc = cycleRef.current;
+    const now = performance.now();
+    if (cyc.nextAt === 0) cyc.nextAt = now + DAY_NIGHT_PERIOD_MS;
+    if (cyc.startedAt < 0 && now >= cyc.nextAt) {
+      cyc.from = cyc.mix;
+      cyc.target = cyc.target === 1 ? 0 : 1;
+      cyc.startedAt = now;
+      cyc.nextAt = now + DAY_NIGHT_PERIOD_MS;
+    }
+    if (cyc.startedAt >= 0) {
+      const p = Math.min(1, Math.max(0, (now - cyc.startedAt) / DAY_NIGHT_TRANSITION_MS));
+      const e = p * p * (3 - 2 * p); // smoothstep
+      cyc.mix = cyc.from + (cyc.target - cyc.from) * e;
+      if (p >= 1) {
+        cyc.startedAt = -1;
+        cyc.mix = cyc.target;
+      }
+    }
+    apply(cyc.mix);
+    // components that only understand a boolean (street lamps, headlights, hologram blending) flip at the midpoint
+    const isNight = cyc.mix > 0.5;
+    if (lastNight.current !== isNight) {
+      lastNight.current = isNight;
+      onNightChange(isNight);
+    }
+  });
+
+  return null;
+}
+
 const KEY_MAP: Record<string, keyof CarInput> = {
   KeyW: "fwd",
   ArrowUp: "fwd",
@@ -196,6 +317,7 @@ const CAM_KEYS: Record<string, "fwd" | "back" | "left" | "right"> = {
 };
 
 const HINT: React.CSSProperties = {
+  transition: "color 1.5s ease, text-shadow 1.5s ease",
   position: "fixed",
   bottom: 84,
   left: 0,
@@ -357,7 +479,12 @@ export default function FolioScene() {
   const [carModel, setCarModel] = useState<CarModel>("ferrari");
   const [smokeOn, setSmokeOn] = useState(true);
   const [showCurbs, setShowCurbs] = useState(true);
-  const [night, setNight] = useState(true);
+  const [night, setNight] = useState(true); // boolean view of the day/night cycle (flips at the transition midpoint)
+  const dayCycleRef = useRef<DayCycle>({ target: 1, from: 1, mix: 1, startedAt: -1, nextAt: 0 });
+  const appRootRef = useRef<HTMLDivElement | null>(null);
+  const ambRef = useRef<THREE.AmbientLight | null>(null);
+  const hemiRef = useRef<THREE.HemisphereLight | null>(null);
+  const sunRef = useRef<THREE.DirectionalLight | null>(null);
   const [showMinimap, setShowMinimap] = useState(false);
   const [zoomMultiplier, setZoomMultiplier] = useState(1.0);
   const [carResetKey, setCarResetKey] = useState(0);
@@ -717,9 +844,10 @@ export default function FolioScene() {
 
   return (
     <div
+      ref={appRootRef}
       className="folio-app"
       data-touch={isTouch ? "true" : "false"}
-      style={{ position: "fixed", inset: 0, backgroundColor: night ? "#0a1238" : "#cbe2f2" }}
+      style={{ position: "fixed", inset: 0, backgroundColor: "#0a1238" }}
       onClick={() => {
         if (inspectingRef.current && performance.now() - inspectStartRef.current > 400) setInspecting(null);
       }}
@@ -740,27 +868,24 @@ export default function FolioScene() {
           {view === "track" ? (
             <PhysicsProvider pose={pose}>
               <>
-                <color attach="background" args={[night ? "#0a1238" : "#cbe2f2"]} />
-              <fog
-                attach="fog"
-                args={
-                  freeCam
-                    ? night
-                      ? ["#0c1747", 150, 780]
-                      : ["#cbe2f2", 250, 780]
-                    : night
-                      ? ["#0c1747", 35, 230]
-                      : ["#cbe2f2", 80, 420]
-                }
-              />
-              {/* Night environment reflections disabled to avoid load hangs */}
-              <ambientLight intensity={night ? 0.45 : 0.7} color={night ? "#6a78d8" : "#ffffff"} />
-              <hemisphereLight args={night ? ["#6f86d6", "#14182b", 0.45] : ["#dbe9f6", "#739855", 0.55]} />
+                <DayNightRig
+                  cycleRef={dayCycleRef}
+                  freeCam={freeCam}
+                  onNightChange={setNight}
+                  rootRef={appRootRef}
+                  ambRef={ambRef}
+                  hemiRef={hemiRef}
+                  sunRef={sunRef}
+                />
+              {/* Fog, sky colour and all lights are animated by <DayNightRig> */}
+              <ambientLight ref={ambRef} intensity={0.45} color="#6a78d8" />
+              <hemisphereLight ref={hemiRef} args={["#6f86d6", "#14182b", 0.45]} />
               {/* Sun / Moon key light */}
               <directionalLight
-                position={night ? [40, 90, -30] : [40, 75, 30]}
-                intensity={night ? 0.85 : 1.35}
-                color={night ? "#c9d8ff" : "#ffffff"}
+                ref={sunRef}
+                position={[40, 90, -30]}
+                intensity={0.85}
+                color="#c9d8ff"
                 castShadow
                 shadow-mapSize={[1024, 1024]}
                 shadow-camera-near={10}
@@ -865,7 +990,7 @@ export default function FolioScene() {
                 const totalRows = Math.ceil(arr.length / perRow);
                 const itemsInRow = row === totalRows - 1 ? arr.length - row * perRow : perRow;
                 const colOffset = col - (itemsInRow - 1) / 2; // centers last row when it has 2
-                const x = 34 - row * 8.0;
+                const x = 20 - row * 8.0;
                 const z = 57 + colOffset * 3.7;
                 const logoRotation: [number, number, number] = [0.017453, 0.872665, 0]; // X:1°, Y:50°, Z:0°
                 return (
@@ -1030,22 +1155,6 @@ export default function FolioScene() {
                 onChange={(e) => setShowCurbs(e.target.checked)}
               />
               Curbs
-            </label>
-
-            <label
-              style={{
-                display: "flex",
-                gap: 6,
-                alignItems: "center",
-                marginLeft: 8,
-                color: "#2a2622",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              <input type="checkbox" checked={night} onChange={(e) => setNight(e.target.checked)} />
-              Night
             </label>
 
             <button

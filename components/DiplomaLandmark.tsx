@@ -92,7 +92,7 @@ export default function DiplomaLandmark({
   ];
   const textY = promptPos[1] - (0.9 + DIPLOMA_LINES.length * 0.16);
   const mobileVertical = !!touch && typeof window !== "undefined" && window.innerHeight > window.innerWidth;
-  const textPos: [number, number, number] = mobileVertical ? [0, promptPos[1], 0] : [promptPos[0], textY, promptPos[2]];
+  const textPos: [number, number, number] = mobileVertical ? [0, promptPos[1] - 0.8, 0] : [promptPos[0], textY, promptPos[2]];
 
   return (
     <group ref={groupRef} position={[DIPLOMA_POS.x, baseY, DIPLOMA_POS.z]}>

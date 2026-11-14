@@ -85,7 +85,7 @@ export default function LinkedInInteractive({
   ];
   const textY = promptPos[1] - (0.9 + LINKEDIN_LINES.length * 0.16);
   const mobileVertical = !!touch && typeof window !== "undefined" && window.innerHeight > window.innerWidth;
-  const textPos: [number, number, number] = mobileVertical ? [0, promptPos[1], 0] : [promptPos[0], textY, promptPos[2]];
+  const textPos: [number, number, number] = mobileVertical ? [0, promptPos[1] - 0.8, 0] : [promptPos[0], textY, promptPos[2]];
 
   return (
     <group position={[LINKEDIN_POS.x, y, LINKEDIN_POS.z]}>

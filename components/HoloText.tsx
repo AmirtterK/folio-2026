@@ -68,21 +68,27 @@ function createHoloTextTexture(spec: HoloLineSpec) {
   const cx = w / 2;
   const cy = h / 2;
 
+  // Softer glow for clearer, less radiant text
   ctx.fillStyle = spec.color;
-  ctx.shadowColor = `rgba(${HOLO_RGB},0.95)`;
-  ctx.shadowBlur = size * 0.55;
-  ctx.fillText(spec.text, cx, cy);
+  ctx.shadowColor = `rgba(${HOLO_RGB},0.45)`;
+  ctx.shadowBlur = size * 0.18;
   ctx.fillText(spec.text, cx, cy);
 
   ctx.shadowBlur = 0;
   ctx.fillStyle = CORE;
   ctx.fillText(spec.text, cx, cy);
 
+  // Subtle colored pass for tint without bloom
+  ctx.fillStyle = spec.color;
+  ctx.globalAlpha = 0.35;
+  ctx.fillText(spec.text, cx, cy);
+  ctx.globalAlpha = 1;
+
   if (spec.underline) {
     ctx.strokeStyle = spec.color;
-    ctx.lineWidth = Math.max(2, size * 0.025);
-    ctx.shadowColor = `rgba(${HOLO_RGB},0.9)`;
-    ctx.shadowBlur = size * 0.25;
+    ctx.lineWidth = Math.max(2, size * 0.03);
+    ctx.shadowColor = `rgba(${HOLO_RGB},0.35)`;
+    ctx.shadowBlur = size * 0.08;
     const y = cy + size * 0.62;
     ctx.beginPath();
     ctx.moveTo(cx - textW / 2, y);
@@ -112,7 +118,7 @@ export default function HoloText({ lines, active, night = true, mobile = false, 
   // On mobile portrait, stack the writing above the hologram instead of beside it.
   const adjustedLines = useMemo(() => {
     if (!mobile) return lines;
-    return lines.map((l) => ({ ...l, x: 0, y: l.y + 2.6 }));
+    return lines.map((l) => ({ ...l, x: 0, y: l.y + 1.2 }));
   }, [lines, mobile]);
 
   const assets = useMemo(() => {
@@ -124,7 +130,7 @@ export default function HoloText({ lines, active, night = true, mobile = false, 
         depthWrite: false,
         toneMapped: false,
         fog: false,
-        blending: night ? THREE.AdditiveBlending : THREE.NormalBlending,
+        blending: THREE.NormalBlending,
         opacity: 0,
       });
       const geo = new THREE.PlaneGeometry(planeW * 1.15, planeH * 1.15);
@@ -176,7 +182,7 @@ export default function HoloText({ lines, active, night = true, mobile = false, 
       }
       g.scale.setScalar(0.88 + 0.12 * eased);
       g.position.set(line.spec.x, line.spec.y + Math.sin(t * 0.9 + i * 1.7) * 0.004, line.spec.z);
-      line.mat.opacity = eased * flick * 0.95;
+      line.mat.opacity = eased * flick * 0.98;
     });
   });
 

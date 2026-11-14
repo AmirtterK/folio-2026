@@ -307,7 +307,7 @@ export default function NeuralNetworkHologram({
   ];
   const textY = promptPos[1] - (0.9 + NEURAL_LINES.length * 0.16);
   const mobileVertical = !!touch && typeof window !== "undefined" && window.innerHeight > window.innerWidth;
-  const textPos: [number, number, number] = mobileVertical ? [0, promptPos[1], 0] : [promptPos[0], textY, promptPos[2]];
+  const textPos: [number, number, number] = mobileVertical ? [0, promptPos[1] - 0.8, 0] : [promptPos[0], textY, promptPos[2]];
 
   return (
     <group position={[NEURAL_POS.x, y, NEURAL_POS.z]} rotation={[0, (Math.PI * 50) / 180, 0]}>

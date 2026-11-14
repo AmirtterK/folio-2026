@@ -5,8 +5,10 @@ import type { MutableRefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
+import RAPIER from "@dimforge/rapier3d-compat";
 import type { CarPose } from "@/components/FolioCar";
 import { groundHeight } from "@/components/Terrain";
+import { usePhysics, isWorldFreed } from "@/components/PhysicsProvider";
 
 /* ---------- Monza Circuit Accurate Layout & Coordinates ---------- */
 
@@ -538,6 +540,7 @@ function TrackLamps({
 }) {
   const { scene } = useGLTF("/models/examples/simple_collection_of_low_poly_street_lights.glb");
   const glow = useMemo(() => createGlowTexture(), []);
+  const { world } = usePhysics();
 
   const lampModel = useMemo(() => {
     const src =
@@ -618,6 +621,24 @@ function TrackLamps({
     return out;
   }, [geometry]);
 
+  // Fixed colliders so the car can't crash through lamps
+  useEffect(() => {
+    if (!world || isWorldFreed(world)) return;
+    const bodies: RAPIER.RigidBody[] = [];
+    for (const l of lamps) {
+      const y = groundHeight(l.x, l.z);
+      const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(l.x, y + 1.4, l.z));
+      world.createCollider(RAPIER.ColliderDesc.cylinder(1.4, 0.35), body);
+      bodies.push(body);
+    }
+    return () => {
+      if (isWorldFreed(world)) return;
+      for (const b of bodies) {
+        try { world.removeRigidBody(b); } catch {}
+      }
+    };
+  }, [world, lamps]);
+
   return (
     <group>
       <LampLights lamps={lamps} pose={pose} />
@@ -635,6 +656,7 @@ function TrackLamps({
 
 function CityBuildings() {
   const { scene } = useGLTF("/models/examples/asian_themed_low_poly_night_city_buildings.glb");
+  const { world } = usePhysics();
   const model = useMemo(() => {
     const root = scene.clone(true);
     root.traverse((o) => {
@@ -662,23 +684,180 @@ function CityBuildings() {
   }, [scene]);
 
   // Place outside track road range (TRACK_BOUNDS ~ x[-140,140], z[-85,85])
+  // Kept far out to avoid buildings clipping into the track/infield
   const placements = useMemo(
     () => [
-      { pos: [-210, 0], rot: 0 },
-      { pos: [210, 0], rot: Math.PI },
-      { pos: [0, -170], rot: Math.PI / 2 },
-      { pos: [0, 170], rot: -Math.PI / 2 },
+      { pos: [-320, 0] as [number, number], rot: 0, s: 1.0 },
+      { pos: [320, 0] as [number, number], rot: Math.PI, s: 1.0 },
+      { pos: [0, -280] as [number, number], rot: Math.PI / 2, s: 1.0 },
     ],
     []
   );
 
+  // Fixed colliders so the car can't drive into buildings
+  useEffect(() => {
+    if (!world || isWorldFreed(world)) return;
+    const bodies: RAPIER.RigidBody[] = [];
+    for (const p of placements) {
+      const y = groundHeight(p.pos[0], p.pos[1]);
+      const body = world.createRigidBody(
+        RAPIER.RigidBodyDesc.fixed().setTranslation(p.pos[0], y + 20, p.pos[1]).setRotation(
+          new RAPIER.Quaternion(0, Math.sin(p.rot / 2), 0, Math.cos(p.rot / 2))
+        )
+      );
+      world.createCollider(RAPIER.ColliderDesc.cuboid(120 * p.s, 20, 120 * p.s), body);
+      bodies.push(body);
+    }
+    return () => {
+      if (isWorldFreed(world)) return;
+      for (const b of bodies) {
+        try { world.removeRigidBody(b); } catch {}
+      }
+    };
+  }, [world, placements]);
+
   return (
     <group>
       {placements.map((p, i) => (
-        <group key={i} position={[p.pos[0], groundHeight(p.pos[0], p.pos[1]), p.pos[1]]} rotation={[0, p.rot, 0]}>
+        <group
+          key={i}
+          position={[p.pos[0], groundHeight(p.pos[0], p.pos[1]), p.pos[1]]}
+          rotation={[0, p.rot, 0]}
+          scale={p.s}
+        >
           <primitive object={model.clone()} />
         </group>
       ))}
+    </group>
+  );
+}
+
+function SanFranciscoCity() {
+  const { scene } = useGLTF("/models/examples/san_francisco_city.glb");
+  const { world } = usePhysics();
+  const model = useMemo(() => {
+    const root = scene.clone(true);
+    root.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if ((m as any).isMesh) {
+        m.castShadow = true;
+        m.receiveShadow = true;
+      }
+    });
+    const box = new THREE.Box3().setFromObject(root);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const maxDim = Math.max(size.x, size.z, 0.001);
+    const target = 240;
+    const s = target / maxDim;
+    root.scale.setScalar(s);
+    root.updateMatrixWorld(true);
+    const box2 = new THREE.Box3().setFromObject(root);
+    const center = new THREE.Vector3();
+    box2.getCenter(center);
+    root.position.x -= center.x;
+    root.position.z -= center.z;
+    root.position.y -= box2.min.y;
+    return root;
+  }, [scene]);
+
+  // Outside track bounds, far enough to avoid clipping
+  const pos: [number, number] = [0, 300];
+  const rot = -Math.PI / 2;
+
+  useEffect(() => {
+    if (!world || isWorldFreed(world)) return;
+    const y = groundHeight(pos[0], pos[1]);
+    const body = world.createRigidBody(
+      RAPIER.RigidBodyDesc.fixed().setTranslation(pos[0], y + 20, pos[1]).setRotation(
+        new RAPIER.Quaternion(0, Math.sin(rot / 2), 0, Math.cos(rot / 2))
+      )
+    );
+    world.createCollider(RAPIER.ColliderDesc.cuboid(120, 20, 120), body);
+    return () => {
+      if (isWorldFreed(world)) return;
+      try { world.removeRigidBody(body); } catch {}
+    };
+  }, [world]);
+
+  return (
+    <group position={[pos[0], groundHeight(pos[0], pos[1]), pos[1]]} rotation={[0, rot, 0]}>
+      <primitive object={model.clone()} />
+    </group>
+  );
+}
+
+function PushableTire({
+  x,
+  z,
+  rot = 0,
+  scale = 1,
+  model,
+}: {
+  x: number;
+  z: number;
+  rot?: number;
+  scale?: number;
+  model: THREE.Object3D;
+}) {
+  const ref = useRef<THREE.Group>(null);
+  const bodyRef = useRef<RAPIER.RigidBody | null>(null);
+  const { world, registerLogo, unregisterLogo } = usePhysics();
+  const idRef = useRef(`tire-${Math.random().toString(36).slice(2)}`);
+  const baseY = () => groundHeight(x, z) + 0.55 * scale;
+
+  useEffect(() => {
+    if (!world || isWorldFreed(world)) return;
+    const y = groundHeight(x, z) + 0.55 * scale;
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rot, 0));
+    const body = world.createRigidBody(
+      RAPIER.RigidBodyDesc.dynamic()
+        .setTranslation(x, y, z)
+        .setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
+        .setLinearDamping(2.8)
+        .setAngularDamping(3.5)
+    );
+    body.setEnabledRotations(false, true, false, true);
+    // Approximate tire as a thick cylinder/box collider
+    world.createCollider(RAPIER.ColliderDesc.cylinder(0.35 * scale, 0.8 * scale), body);
+    bodyRef.current = body;
+    registerLogo(idRef.current, body);
+    return () => {
+      const b = bodyRef.current;
+      bodyRef.current = null;
+      if (b && !isWorldFreed(world)) {
+        try { world.removeRigidBody(b); } catch {}
+      }
+      unregisterLogo(idRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [world]);
+
+  useFrame(() => {
+    const body = bodyRef.current;
+    const g = ref.current;
+    if (!body || !g) return;
+    if (isWorldFreed(world)) {
+      bodyRef.current = null;
+      return;
+    }
+    body.applyImpulse({ x: 0, y: -0.8, z: 0 }, true);
+    const t = body.translation();
+    const ground = groundHeight(t.x, t.z) + 0.55 * scale;
+    if (t.y < ground) {
+      body.setTranslation({ x: t.x, y: ground, z: t.z }, true);
+      const lv = body.linvel();
+      if (lv.y < 0) body.setLinvel({ x: lv.x, y: 0, z: lv.z }, true);
+    }
+    const tt = body.translation();
+    const rr = body.rotation();
+    g.position.set(tt.x, tt.y, tt.z);
+    g.quaternion.set(rr.x, rr.y, rr.z, rr.w);
+  });
+
+  return (
+    <group ref={ref} position={[x, baseY(), z]} rotation={[0, rot, 0]} scale={scale}>
+      <primitive object={model.clone()} />
     </group>
   );
 }
@@ -710,7 +889,7 @@ function MiddleTires() {
     return root;
   }, [scene]);
 
-  // 4 tires placed in the middle/infield area
+  // 4 tires placed in the middle/infield area (pushable, stay on ground)
   const tires = useMemo(
     () => [
       { x: -18, z: 8, rot: 0.4, s: 1.0 },
@@ -724,14 +903,7 @@ function MiddleTires() {
   return (
     <group>
       {tires.map((t, i) => (
-        <group
-          key={i}
-          position={[t.x, groundHeight(t.x, t.z), t.z]}
-          rotation={[0, t.rot, 0]}
-          scale={t.s}
-        >
-          <primitive object={tireModel.clone()} />
-        </group>
+        <PushableTire key={i} x={t.x} z={t.z} rot={t.rot} scale={t.s} model={tireModel} />
       ))}
     </group>
   );
@@ -800,6 +972,7 @@ export function RacingTrack({ showCurbs = true, night = false, withTerrain = tru
       )}
 
       <CityBuildings />
+      <SanFranciscoCity />
       <MiddleTires />
 
       {night && <TrackLamps geometry={monzaGeometry} pose={pose} />}
@@ -1054,3 +1227,5 @@ export function FolioTopDownCam({
 useGLTF.preload("/models/examples/simple_collection_of_low_poly_street_lights.glb");
 useGLTF.preload("/models/examples/asian_themed_low_poly_night_city_buildings.glb");
 useGLTF.preload("/models/examples/low_poly_tire_fixed.glb");
+
+useGLTF.preload("/models/examples/san_francisco_city.glb");

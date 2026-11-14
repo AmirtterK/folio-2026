@@ -708,18 +708,19 @@ function BuildingsRing() {
 
   // Arrange outside track (track ~ x[-140,140], z[-85,85]) within smaller map.
   // Shorter/smaller buildings placed on an inner ring, larger/taller on an outer ring for depth/skyline.
+  // Latest added city models (Chicago, game-ready) kept smaller; back/outer ring brought closer.
   const placements = useMemo<BuildingPlacement[]>(
     () => [
       // Inner ring (shorter/smaller, closer)
-      { key: "asian-ne", url: "asian", pos: [165, -115], rot: Math.PI * 0.15, target: 95, collider: [45, 14, 45] },
-      { key: "sf-se", url: "sf", pos: [170, 115], rot: -Math.PI * 0.35, target: 90, collider: [42, 14, 42] },
-      { key: "chicago-sw", url: "chicago", pos: [-165, 115], rot: Math.PI * 0.7, target: 100, collider: [48, 16, 48] },
-      { key: "game-nw", url: "gameReady", pos: [-170, -115], rot: -Math.PI * 0.1, target: 105, collider: [50, 14, 50] },
-      // Outer ring (bigger/taller, farther back)
-      { key: "chicago-n", url: "chicago", pos: [0, -150], rot: Math.PI / 2, target: 150, collider: [70, 26, 70] },
-      { key: "sf-e", url: "sf", pos: [205, 0], rot: Math.PI, target: 145, collider: [68, 24, 68] },
-      { key: "asian-s", url: "asian", pos: [0, 150], rot: -Math.PI / 2, target: 155, collider: [72, 22, 72] },
-      { key: "game-w", url: "gameReady", pos: [-205, 0], rot: 0, target: 160, collider: [75, 20, 75] },
+      { key: "asian-ne", url: "asian", pos: [160, -110], rot: Math.PI * 0.15, target: 85, collider: [55, 20, 55] },
+      { key: "sf-se", url: "sf", pos: [165, 110], rot: -Math.PI * 0.35, target: 80, collider: [50, 20, 50] },
+      { key: "chicago-sw", url: "chicago", pos: [-160, 110], rot: Math.PI * 0.7, target: 70, collider: [55, 22, 55] },
+      { key: "game-nw", url: "gameReady", pos: [-165, -110], rot: -Math.PI * 0.1, target: 75, collider: [55, 20, 55] },
+      // Outer ring (bigger/taller feel but brought closer; latest models smaller)
+      { key: "chicago-n", url: "chicago", pos: [0, -132], rot: Math.PI / 2, target: 95, collider: [70, 28, 70] },
+      { key: "sf-e", url: "sf", pos: [188, 0], rot: Math.PI, target: 120, collider: [75, 28, 75] },
+      { key: "asian-s", url: "asian", pos: [0, 132], rot: -Math.PI / 2, target: 125, collider: [75, 26, 75] },
+      { key: "game-w", url: "gameReady", pos: [-188, 0], rot: 0, target: 100, collider: [70, 26, 70] },
     ],
     []
   );

@@ -1,39 +1,39 @@
 /** Project holograms - in front of the start line, off-road */
 export const NEURAL_POS = {
-  x: -22,
-  z: 35,
+  x: -18,
+  z: 38,
 };
 
 /** Holographic chess knight - in front of the start line, off-road */
 export const KNIGHT_POS = {
-  x: -38,
-  z: 35,
+  x: -52,
+  z: 28,
   yaw: Math.PI,
 };
 
 /** Ricoh printer (resume) - in a row near the robot arm, off the track */
 export const PRINTER_POS = {
-  x: -34,
-  z: 35,
+  x: -36,
+  z: 32,
 };
 
 /** Gmail mailbox (email) - in a row near the robot arm, off the track */
 export const GMAIL_POS = {
-  x: -14,
-  z: 35,
+  x: -8,
+  z: 26,
 };
 
 /** Diploma - in front of the start line, off-road */
 export const DIPLOMA_POS = {
-  x: -6,
-  z: 35,
+  x: 8,
+  z: 40,
   rotY: 0,
 };
 
 /** LinkedIn logo - in a row near the robot arm, off the track */
 export const LINKEDIN_POS = {
-  x: 6,
-  z: 35,
+  x: 22,
+  z: 30,
 };
 
 /**

@@ -301,7 +301,7 @@ export default function NeuralNetworkHologram({
   const holo = { hologramColor: HOLO_COLOR, hologramBrightness: 1.3, scanlineSize: 8, enableAdditive: night, ...hologram };
 
   return (
-    <group position={[NEURAL_POS.x, y, NEURAL_POS.z]}>
+    <group position={[NEURAL_POS.x, y, NEURAL_POS.z]} rotation={[0, (Math.PI * 50) / 180, 0]}>
       {/* Invisible tap hitbox so the whole landmark is tappable on mobile */}
       <mesh
         position={[0, 2, 0]}

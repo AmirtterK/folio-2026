@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
@@ -7,18 +7,15 @@ import type { HandLandmarker } from "@mediapipe/tasks-vision";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 
 /* ------------------------------------------------------------------------------------------------
- * Hand gestures -> free-cam control
+ * Hand gestures -> fixed camera control (rotate only)
  *
- *   POINT  (index out, middle/ring/pinky folded)  + move   => orbit (drag feel: the scene follows your hand)
- *   PINCH  (thumb tip touching index tip)                  => zoom dial: held closed keeps zooming OUT,
- *                                                             spreading thumb+index apart keeps zooming IN,
- *                                                             the middle band holds the distance
- *   anything else (open hand, fist, ...)                   => nothing happens
+ *   POINT  (index out, middle/ring/pinky folded)  + move   => rotate/orbit (drag feel: the scene follows your hand)
+ *   anything else                                          => nothing happens
+ * (Zoom/pinch disabled: camera position/distance stays locked)
  *
  * Design notes (why it is built this way):
  *  - Poses are classified from MediaPipe *world* landmarks (metric 3D), using joint bend angles, so the result
  *    does not depend on the webcam aspect ratio, hand size, or hand orientation.
- *  - Finger up/down and pinch both use two thresholds (hysteresis) so they do not flicker at the boundary.
  *  - The current pose is debounced in time, and a short hand-lost grace period keeps the mode alive through
  *    one or two dropped frames instead of resetting everything.
  *  - Fingertip positions go through a One Euro filter (low jitter when still, low lag when moving fast).
@@ -33,7 +30,7 @@ const WASM_PATH = "/mediapipe/wasm";
 const MODEL_LOCAL = "/mediapipe/hand_landmarker.task"; // optional: drop the model here to skip the download
 const MODEL_REMOTE =
   "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
-const MODEL_CACHE = "hand-landmarker-v2";
+const MODEL_CACHE = "hand-landmarker-v3";
 
 // MediaPipe confidence thresholds (library default is 0.5 for all three; slightly lower = fewer dropouts)
 const DETECT_CONF = 0.4;
@@ -315,14 +312,14 @@ export default function HandGesturesCamera({ controlsRef, enabled }: HandGesture
 
       const setBadge = () => {
         const label = !controlsRef.current
-          ? "Free cam off (press F)"
+          ? "Camera not ready"
           : !hasHand
             ? "No hand"
             : mode === "rotate"
               ? "Rotate"
               : mode === "zoom"
                 ? "Zoom"
-                : "Hand ready";
+                : "";
         if (label !== lastLabel) {
           lastLabel = label;
           if (badgeRef.current) badgeRef.current.textContent = label;
@@ -349,7 +346,9 @@ export default function HandGesturesCamera({ controlsRef, enabled }: HandGesture
           candSince = now;
           return;
         }
-        if (now - candSince >= (raw === "none" ? EXIT_MS : ENTER_MS)) pose = raw;
+        // start gestures immediately; only debounce dropping to none
+        const delay = raw === "none" ? EXIT_MS : 0;
+        if (now - candSince >= delay) pose = raw;
       };
 
       const draw = (lm: P3[] | null) => {
@@ -410,48 +409,15 @@ export default function HandGesturesCamera({ controlsRef, enabled }: HandGesture
 
         const others = (fingerExt[1] ? 1 : 0) + (fingerExt[2] ? 1 : 0) + (fingerExt[3] ? 1 : 0);
         const pointing = fingerExt[0] && others === 0; // index out, rest folded (thumb ignored)
-        const pointLike = pointing && !thumbOut; // ...and the thumb tucked in: a real pointing hand, not a spread
+        // Pinch/spread (thumb-index aperture) to zoom: middle/ring/pinky folded, not pointing
+        const zoomGesture = !pointing && others === 0 && pinchRatio < ZOOM_MAX_APERTURE;
 
-        // Detect index-thumb ASAP: use their distance directly for zoom intent
-        const pinchNow = pinchRatio < PINCH_EXIT; // thumb/index engaged or close
-        const closeZoom = pinchRatio < ZOOM_CLOSED; // clearly close => zoom out intent
-        // Spread-apart thumb/index should only continue zoom when already zooming; a pointing/slide hand often has them far apart
-        const spreadZoom = pinchRatio > ZOOM_OPEN && pose === "zoom" && !pointLike && !pointing;
+        rawPose = pointing ? "point" : zoomGesture ? "zoom" : "none";
+        updatePose(rawPose, now);
+        // respond immediately based on detected pose
+        setMode(rawPose === "point" ? "rotate" : rawPose === "zoom" ? "zoom" : pose === "point" ? "rotate" : pose === "zoom" ? "zoom" : "idle");
 
-        // Zoom starts on a close pinch (or continues when already zooming). Spreading keeps zooming only while in zoom mode.
-        const zoomStay =
-          pose === "zoom" &&
-          zoomBase >= 0 &&
-          Math.abs(others - zoomBase) <= 1 &&
-          !pointLike &&
-          !pointing &&
-          pinchRatio < ZOOM_MAX_APERTURE;
-        const zoomRaw = pinchOn || pinchNow || zoomStay;
-
-        rawPose = zoomRaw ? "zoom" : pointing ? "point" : "none";
-        // promote zoom immediately for fast response when index/thumb indicate a close pinch (not spread-while-sliding)
-        if (rawPose === "zoom" && (pinchOn || pinchNow || closeZoom || zoomStay)) {
-          pose = "zoom";
-          cand = "zoom";
-        } else {
-          updatePose(rawPose, now);
-        }
-        if (pose !== "zoom") zoomBase = -1;
-        else if (zoomBase < 0) zoomBase = others;
-        setMode(pose === "point" ? "rotate" : pose === "zoom" ? "zoom" : "idle");
-
-        // Drive zoom responsively when a pinch/zoom gesture is detected; keep slide responsive in point mode
-        const zoomActive = rawPose === "zoom" || mode === "zoom";
-        const rotateActive = rawPose === "point" || mode === "rotate";
-        if (zoomActive && rawPose === "zoom") {
-          // Pinch dial based on index-thumb distance: small/close => zoom out, big/spread => zoom in
-          const r = fr.filter(pinchRatio, now / 1000);
-          if (r < ZOOM_CLOSED) tZoom = ZOOM_RATE * clamp((ZOOM_CLOSED - r) / 0.22, 0.5, 1);
-          else if (r > ZOOM_OPEN) tZoom = -ZOOM_RATE * clamp((r - ZOOM_OPEN) / 0.25, 0.5, 1);
-          else tZoom = 0;
-          tYaw = tPitch = 0;
-          prevX = null;
-        } else if (rotateActive && rawPose === "point" && !zoomRaw) {
+        if (rawPose === "point") {
           const t = now / 1000;
           const sx = fx.filter(lm[8].x, t);
           const sy = fy.filter(lm[8].y, t);
@@ -466,6 +432,17 @@ export default function HandGesturesCamera({ controlsRef, enabled }: HandGesture
           }
           prevX = sx;
           prevY = sy;
+          prevT = t;
+        } else if (rawPose === "zoom") {
+          const t = now / 1000;
+          const aperture = fr.filter(pinchRatio, t);
+          // pinch close (smaller aperture) => zoom out, spread (larger aperture) => zoom in
+          if (aperture < ZOOM_CLOSED) tZoom = ZOOM_RATE;
+          else if (aperture > ZOOM_OPEN) tZoom = -ZOOM_RATE;
+          else tZoom = 0;
+          tYaw = 0;
+          tPitch = 0;
+          prevX = null;
           prevT = t;
         } else {
           tYaw = tPitch = tZoom = 0;
@@ -566,7 +543,6 @@ export default function HandGesturesCamera({ controlsRef, enabled }: HandGesture
           }
         }
       };
-
       raf = requestAnimationFrame(tick);
     }
 
@@ -650,7 +626,7 @@ export default function HandGesturesCamera({ controlsRef, enabled }: HandGesture
               pointerEvents: "none",
             }}
           >
-            Point index (other fingers folded) + move = rotate · Pinch thumb+index: hold closed = zoom out, spread apart = zoom in
+            Point index (thumb tucked) + move = rotate · Thumb+index pinch/spread, other fingers folded = zoom
           </div>
         </>
       )}

@@ -1,0 +1,112 @@
+"use client";
+
+import { useMemo, useRef, useState } from "react";
+import type { MutableRefObject } from "react";
+import { useFrame } from "@react-three/fiber";
+import { useGLTF } from "@react-three/drei";
+import * as THREE from "three";
+import { groundHeight } from "@/components/Terrain";
+import type { CarPose } from "@/components/FolioCar";
+import { LINKEDIN_POS } from "@/components/landmarkConfig";
+import HoloText from "@/components/HoloText";
+import HoloKeyPrompt from "@/components/HoloKeyPrompt";
+import { LINKEDIN_LINES } from "@/components/landmarkProjects";
+
+export { LINKEDIN_POS };
+
+type LinkedInInteractiveProps = {
+  pose: MutableRefObject<CarPose>;
+  inspecting: boolean;
+  onNearChange: (near: boolean) => void;
+  onInspectToggle: (inspect: boolean) => void;
+  night?: boolean;
+  touch?: boolean;
+  /** Temporary debug rotation override (radians) */
+  debugRotation?: { x: number; y: number; z: number };
+};
+
+export default function LinkedInInteractive({
+  pose,
+  inspecting,
+  onNearChange,
+  onInspectToggle,
+  night = true,
+  touch = false,
+  debugRotation,
+}: LinkedInInteractiveProps) {
+  const [isNear, setIsNear] = useState(false);
+  const isNearRef = useRef(false);
+  const y = groundHeight(LINKEDIN_POS.x, LINKEDIN_POS.z);
+
+  const { scene } = useGLTF("/models/examples/linkedin.glb");
+  const model = useMemo(() => {
+    const clone = scene.clone(true);
+    clone.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if ((m as any).isMesh) {
+        m.castShadow = true;
+        m.receiveShadow = true;
+      }
+    });
+    // Default: X: 90°, Y: 0°, Z: -50° (debug override available for tuning)
+    const rot = debugRotation ?? { x: Math.PI / 2, y: 0, z: -Math.PI * 50 / 180 };
+    clone.scale.setScalar(1.2);
+    clone.rotation.set(rot.x, rot.y, rot.z);
+    clone.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(clone);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    if (isFinite(box.min.y)) {
+      clone.position.x -= center.x;
+      clone.position.z -= center.z;
+      clone.position.y -= box.min.y;
+    }
+    return clone;
+  }, [scene, debugRotation?.x, debugRotation?.y, debugRotation?.z]);
+
+  useFrame(() => {
+    const p = pose.current;
+    if (p) {
+      const dist = Math.hypot(p.x - LINKEDIN_POS.x, p.z - LINKEDIN_POS.z);
+      const nearNow = isNearRef.current ? dist < 10.0 : dist < 6.5;
+      if (nearNow !== isNearRef.current) {
+        isNearRef.current = nearNow;
+        setIsNear(nearNow);
+        onNearChange(nearNow);
+      }
+    }
+  });
+
+  return (
+    <group position={[LINKEDIN_POS.x, y, LINKEDIN_POS.z]}>
+      <mesh
+        position={[0, 1.6, 0]}
+        userData={{ landmark: "linkedin" }}
+        onClick={(e) => {
+          if (isNear && !inspecting) {
+            e.stopPropagation();
+            onInspectToggle(true);
+          }
+        }}
+      >
+        <sphereGeometry args={[3.2, 12, 12]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+
+      {/* Plain LinkedIn logo, standing upright/centered on the ground */}
+      <primitive object={model} />
+
+      <group position={[2.6, 0.5, 0]}>
+        <HoloText lines={LINKEDIN_LINES} active={inspecting} night={night} mobile={touch} />
+      </group>
+      <HoloKeyPrompt
+        active={isNear}
+        visible={!inspecting}
+        onActivate={() => onInspectToggle(true)}
+        position={[1.6, 2.2, 0]}
+        night={night}
+        touch={touch}
+      />
+    </group>
+  );
+}

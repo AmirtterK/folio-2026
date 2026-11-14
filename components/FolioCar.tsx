@@ -32,11 +32,14 @@ import type { ThreeElements } from "@react-three/fiber";
 import * as THREE from "three";
 import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
+// Use DRACO decoder (worker-based) when loading GLTFs to offload mesh decompression from the main thread.
+const DRACO_DECODER = "https://www.gstatic.com/draco/versioned/decoders/1.5.7/";
+
 export type CarInput = { fwd: number; back: number; left: number; right: number; brake: number };
 
 export type CarPose = { x: number; y: number; z: number; yaw: number; speed: number };
 
-export type CarModel = "toy" | "r17" | "sf90" | "nissan" | "porsche" | "ferrari" | "corvette";
+export type CarModel = "toy" | "sf90" | "nissan" | "porsche" | "ferrari" | "corvette";
 
 export type FolioCarProps = {
   /** Paint color. */
@@ -70,8 +73,7 @@ export type FolioCarProps = {
   /** Optional scale factor for the car (default 1.0). */
   carScale?: number;
   /**
-   * Car body: the original procedural toy car, the Renault R17 GLB (public/models/r17.glb, built by scripts/build-r17.mjs),
-   * or the Ferrari SF90 GLB (public/models/sf90.glb, built by scripts/build-sf90.mjs). The SF90 has no headlights,
+   * Car body: the original procedural toy car or a GLB model. The SF90 has no headlights,
    * ONE exhaust plume from the middle of the rear, and a small red dot light at the back instead of light bars.
    */
   model?: CarModel;
@@ -85,7 +87,7 @@ export type FolioCarProps = {
 
 const KEY_MAP: Record<string, keyof CarInput> = {
   KeyW: "fwd", ArrowUp: "fwd", KeyS: "back", ArrowDown: "back",
-  KeyA: "right", ArrowLeft: "right", KeyD: "left", ArrowRight: "left", Space: "brake",
+  KeyA: "left", ArrowLeft: "left", KeyD: "right", ArrowRight: "right", Space: "brake",
 };
 
 /**
@@ -104,16 +106,8 @@ const WHEEL_R = 0.45;
 const WHEEL_X = 0.86;
 const WHEEL_Z = 1.2;
 
-/* Renault R17 model (scripts/build-r17.mjs): same wheelbase as the toy car, smaller wheels, narrower track. */
-const R17_URL = "/models/r17.glb";
-const R17_WHEEL_R = 0.3182;
-const R17_WHEEL_X = 0.698;
-const R17_Z_SHIFT = -0.04; // the GLB's axles sit at z = 1.24 / -1.16; shift so they are at +-1.2 like the toy car
-const R17_EXHAUST = { x: 0.45, y: 0.32, z: -2.1 };
-const R17_LAMP = { x: 0.54, y: 0.6, z: 1.92 };
-
 // Preload only the default car for faster startup; other cars load on selection.
-useGLTF.preload("/models/ferrari_f599.glb");
+useGLTF.preload("/models/ferrari_f599.glb", DRACO_DECODER);
 
 /* Ferrari SF90 (scripts/build-sf90.mjs): same wheelbase as the toy car, small F1 wheels, one centre exhaust. Credit: "Ferrari F1 2019" by vecarz, CC-BY-4.0. */
 const SF90_URL = "/models/sf90.glb";
@@ -357,8 +351,6 @@ type CarConfig = { wheelR: number; trackX: number; exhaust: Pipe };
 
 function carConfig(model: CarModel): CarConfig {
   switch (model) {
-    case "r17":
-      return { wheelR: R17_WHEEL_R, trackX: R17_WHEEL_X, exhaust: R17_EXHAUST };
     case "sf90":
       return { wheelR: SF90_WHEEL_R, trackX: SF90_WHEEL_X, exhaust: SF90_EXHAUST };
     case "porsche":
@@ -630,58 +622,6 @@ function HeadlightSide({ x, level, y = 0.86, z = 2.0 }: { x: number; level: Muta
   );
 }
 
-/* ---------- Renault R17 body ---------- */
-
-/** Loads the R17 GLB, repaints it with the shared materials and hands the wheel / steering nodes to the physics. */
-function R17Body({
-  mats,
-  spinGroups,
-  steerPivots,
-  cast,
-}: {
-  mats: Mats;
-  spinGroups: MutableRefObject<THREE.Group[]>;
-  steerPivots: MutableRefObject<THREE.Group[]>;
-  cast: boolean;
-}) {
-  const gltf = useGLTF(R17_URL);
-  const root = useMemo(() => {
-    const r = gltf.scene.clone(true);
-    r.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if (!m.isMesh) return;
-      m.userData.matName = (m.material as THREE.Material).name;
-      m.castShadow = cast;
-    });
-    return r;
-  }, [gltf, cast]);
-
-  // GLB material names -> the shared materials, so the `color` prop still repaints the car
-  useLayoutEffect(() => {
-    const map: Record<string, THREE.Material> = {
-      paint: mats.paint, glass: mats.glass, trim: mats.trim, lamp: mats.lamp,
-      tail: mats.tail, chrome: mats.chrome, tire: mats.tire, rim: mats.chrome,
-    };
-    root.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if (m.isMesh && map[m.userData.matName]) m.material = map[m.userData.matName];
-    });
-  }, [root, mats]);
-
-  useLayoutEffect(() => {
-    const get = (n: string) => root.getObjectByName(n) as THREE.Group;
-    // same order as the toy car: 0 front +x, 1 front -x, 2 rear +x, 3 rear -x
-    spinGroups.current = [get("Wheel_FL"), get("Wheel_FR"), get("Wheel_RL"), get("Wheel_RR")];
-    steerPivots.current = [get("Steer_FL"), get("Steer_FR")];
-  }, [root, spinGroups, steerPivots]);
-
-  return (
-    <group position={[0, 0, R17_Z_SHIFT]}>
-      <primitive object={root} />
-    </group>
-  );
-}
-
 /* ---------- Ferrari SF90 body ---------- */
 
 /** Loads the SF90 GLB and hands its wheel / steering nodes to the physics. It keeps its own livery and materials (the paint colour does not apply). */
@@ -694,7 +634,7 @@ function Sf90Body({
   steerPivots: MutableRefObject<THREE.Group[]>;
   cast: boolean;
 }) {
-  const gltf = useGLTF(SF90_URL);
+  const gltf = useGLTF(SF90_URL, DRACO_DECODER);
   const root = useMemo(() => {
     const r = gltf.scene.clone(true);
     r.traverse((o) => {
@@ -732,7 +672,7 @@ function SimpleCarBody({
   steerPivots,
   cast,
 }: WheelRig & { url: string; scale: number; zShift: number; yShift?: number }) {
-  const gltf = useGLTF(url);
+  const gltf = useGLTF(url, DRACO_DECODER);
   const root = useMemo(() => {
     const r = gltf.scene.clone(true);
     r.traverse((o) => {
@@ -802,7 +742,7 @@ const NISSAN_WHEELS: {
 ];
 
 function NissanBody({ spinGroups, steerPivots, cast }: WheelRig) {
-  const gltf = useGLTF(NISSAN_URL);
+  const gltf = useGLTF(NISSAN_URL, DRACO_DECODER);
   const root = useMemo(() => {
     const r = gltf.scene.clone(true);
     r.traverse((o) => {
@@ -934,7 +874,6 @@ export default function FolioCar({
   ...groupProps
 }: FolioCarProps) {
   const toy = model === "toy";
-  const r17 = model === "r17";
   const sf90 = model === "sf90";
   const nissan = model === "nissan";
   const porsche = model === "porsche";
@@ -1234,17 +1173,7 @@ export default function FolioCar({
       {/* moves around the world when `terrain` is given, otherwise stays at the origin */}
       <group ref={poseRef}>
       <group ref={carRef} scale={carScale} position={[0, 0.02 * carScale, 0]}>
-        {r17 && (
-          <>
-            <Suspense fallback={null}>
-              <R17Body mats={mats} spinGroups={spinGroups} steerPivots={steerPivots} cast={driving} />
-              <CarReady onReady={onReady} />
-              {[-1, 1].map((s) => (
-                <HeadlightSide key={s} x={s * R17_LAMP.x} y={R17_LAMP.y} z={R17_LAMP.z} level={lightLevel} beam={beam} />
-              ))}
-            </Suspense>
-          </>
-        )}
+
         {sf90 && (
           <>
             {/* no headlights on this one: a single red dot light at the back, one smoke plume from the rear middle */}

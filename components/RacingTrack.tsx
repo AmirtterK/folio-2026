@@ -119,7 +119,7 @@ function createTrackTexture(): THREE.CanvasTexture {
 
 /* ---------- Procedural Monza Geometry Generator ---------- */
 
-export function buildMonzaGeometry(width = 8.5, period = 3.2, yOffset = 0) {
+export function buildMonzaGeometry(width = 11.73, period = 3.2, yOffset = 0) {
   const points = [
     new THREE.Vector3(30.15, 0.02, 57.15),
     new THREE.Vector3(25.12, 0.02, 57.15),
@@ -680,7 +680,7 @@ export function RacingTrack({ showCurbs = true, night = false, withTerrain = tru
         material={startLineMaterial}
         receiveShadow
       >
-        <planeGeometry args={[8.5, 2.0]} />
+        <planeGeometry args={[11.73, 2.0]} />
       </mesh>
 
       {/* Starting Grid Line markings along the straight heading West */}
@@ -688,9 +688,9 @@ export function RacingTrack({ showCurbs = true, night = false, withTerrain = tru
         <mesh
           key={x}
           rotation={[-Math.PI / 2, 0, Math.PI / 2]}
-          position={[x, 0.023, 57.15 + (idx % 2 === 0 ? 2.2 : -2.2)]}
+          position={[x, 0.023, 57.15 + (idx % 2 === 0 ? 3.036 : -3.036)]}
         >
-          <planeGeometry args={[2.5, 0.25]} />
+          <planeGeometry args={[3.45, 0.25]} />
           <meshBasicMaterial color="#ffffff" opacity={0.7} transparent />
         </mesh>
       ))}
@@ -708,6 +708,7 @@ export function FolioTopDownCam({
   inspectTarget,
   inspectCamPos,
   freeCam = false,
+  controlsRef,
 }: {
   pose: MutableRefObject<CarPose>;
   zoomMultiplier?: number;
@@ -718,6 +719,8 @@ export function FolioTopDownCam({
   inspectCamPos?: THREE.Vector3;
   /** When true this component stops touching the camera (OrbitControls owns it). On exit it blends back. */
   freeCam?: boolean;
+  /** OrbitControls ref so we can save/restore camera target when entering/exiting inspection from free cam. */
+  controlsRef?: MutableRefObject<any>;
 }) {
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
@@ -729,8 +732,16 @@ export function FolioTopDownCam({
     wasFree: false,
     returning: false,
     returnT: 0,
+    wasInspecting: false,
+    savedForInspect: false,
     fromPos: new THREE.Vector3(),
     fromQuat: new THREE.Quaternion(),
+    savedPos: new THREE.Vector3(),
+    savedQuat: new THREE.Quaternion(),
+    savedTarget: new THREE.Vector3(),
+    returnToPos: new THREE.Vector3(),
+    returnToQuat: new THREE.Quaternion(),
+    returnToTarget: new THREE.Vector3(),
     tmpPos: new THREE.Vector3(),
     tmpMat: new THREE.Matrix4(),
     tmpQuat: new THREE.Quaternion(),
@@ -741,7 +752,7 @@ export function FolioTopDownCam({
     const p = pose.current;
     const s = st.current;
 
-    // Smoothly blend inspection alpha (0 = normal driving, 1 = inspecting trophy)
+    // Smoothly blend inspection alpha (0 = normal driving, 1 = inspecting)
     const targetAlpha = inspecting && inspectTarget && inspectCamPos ? 1 : 0;
     s.inspectAlpha += (targetAlpha - s.inspectAlpha) * (1 - Math.exp(-4.5 * dt));
 
@@ -765,21 +776,60 @@ export function FolioTopDownCam({
     const targetRadius = baseRadius + speedZoom;
     s.currentRadius += (targetRadius - s.currentRadius) * (1 - Math.exp(-3.5 * dt));
 
-    // Free cam: leave the camera alone (OrbitControls drives it). We keep tracking the car above
-    // so the return trip lands on wherever the car is when free cam is closed.
-    if (freeCam) {
-      s.wasFree = true;
+    const inspectActive = !!(inspecting && inspectTarget && inspectCamPos);
+
+    // Save camera params on inspection start (from free/orbit camera state)
+    if (inspectActive && !s.wasInspecting) {
+      s.savedForInspect = !!freeCam;
+      s.savedPos.copy(camera.position);
+      s.savedQuat.copy(camera.quaternion);
+      const ctrls = controlsRef?.current;
+      if (ctrls?.target) s.savedTarget.copy(ctrls.target);
+      else s.savedTarget.copy(carTarget);
       s.returning = false;
+    }
+
+    // Begin animated return to saved camera params on inspection exit
+    if (!inspectActive && s.wasInspecting) {
+      s.fromPos.copy(camera.position);
+      s.fromQuat.copy(camera.quaternion);
+      if (s.savedForInspect) {
+        s.returnToPos.copy(s.savedPos);
+        s.returnToQuat.copy(s.savedQuat);
+        s.returnToTarget.copy(s.savedTarget);
+      } else {
+        // fall back to chase view
+        const phi = Math.PI * 0.3;
+        const r = s.currentRadius;
+        s.returnToPos.set(carTarget.x, carTarget.y + r * Math.cos(phi), carTarget.z + r * Math.sin(phi));
+        s.tmpMat.lookAt(s.returnToPos, carTarget, camera.up);
+        s.returnToQuat.setFromRotationMatrix(s.tmpMat);
+        s.returnToTarget.copy(carTarget);
+      }
+      s.returning = true;
+      s.returnT = 0;
+    }
+    s.wasInspecting = inspectActive;
+
+    // Free cam: leave the camera alone (OrbitControls drives it), unless inspection needs control.
+    if (freeCam && !inspectActive && !s.returning) {
+      s.wasFree = true;
       return;
     }
 
-    // Just left free cam: remember where the free camera was so we can glide back from it.
-    if (s.wasFree) {
+    // Just left free cam (non-inspection path): remember pose to glide back to chase
+    if (s.wasFree && !s.savedForInspect) {
       s.wasFree = false;
       s.returning = true;
       s.returnT = 0;
       s.fromPos.copy(camera.position);
       s.fromQuat.copy(camera.quaternion);
+      const phi = Math.PI * 0.3;
+      const r = s.currentRadius;
+      s.returnToPos.set(carTarget.x, carTarget.y + r * Math.cos(phi), carTarget.z + r * Math.sin(phi));
+      s.tmpMat.lookAt(s.returnToPos, carTarget, camera.up);
+      s.returnToQuat.setFromRotationMatrix(s.tmpMat);
+      s.returnToTarget.copy(carTarget);
     }
 
     // High-angle top-down view aligned straight with the track axes (theta = 0)
@@ -796,14 +846,30 @@ export function FolioTopDownCam({
     );
 
     if (s.returning) {
-      // Ease from the free-cam pose back to the regular chase view (~0.8s)
+      // Ease from current/inspect pose back to saved (or chase) camera params (~0.8s)
       s.returnT = Math.min(1, s.returnT + dt / 0.8);
       const e = 1 - Math.pow(1 - s.returnT, 3);
-      camera.position.lerpVectors(s.fromPos, driveCamPos, e);
-      s.tmpMat.lookAt(driveCamPos, s.smoothedTarget, camera.up);
-      s.tmpQuat.setFromRotationMatrix(s.tmpMat);
-      camera.quaternion.slerpQuaternions(s.fromQuat, s.tmpQuat, e);
-      if (s.returnT >= 1) s.returning = false;
+      camera.position.lerpVectors(s.fromPos, s.returnToPos, e);
+      camera.quaternion.slerpQuaternions(s.fromQuat, s.returnToQuat, e);
+      const ctrls = controlsRef?.current;
+      if (ctrls?.target) {
+        ctrls.target.lerpVectors(s.smoothedTarget, s.returnToTarget, e);
+        ctrls.update?.();
+      }
+      if (s.returnT >= 1) {
+        s.returning = false;
+        if (s.savedForInspect) {
+          camera.position.copy(s.returnToPos);
+          camera.quaternion.copy(s.returnToQuat);
+          const ctrls2 = controlsRef?.current;
+          if (ctrls2?.target) {
+            ctrls2.target.copy(s.returnToTarget);
+            ctrls2.update?.();
+          }
+        }
+        s.savedForInspect = false;
+        s.wasFree = false;
+      }
       return;
     }
 
@@ -817,14 +883,20 @@ export function FolioTopDownCam({
         pull = Math.min(2.2, 1 / viewAspect);
       }
       s.tmpPos.copy(inspectCamPos).sub(inspectTarget).multiplyScalar(pull).add(inspectTarget);
-      // Smoothly blend position between driving overhead and inspection angle
-      camera.position.lerpVectors(driveCamPos, s.tmpPos, s.inspectAlpha);
+      // Smoothly blend position between saved/free-cam pose and inspection angle
+      camera.position.lerpVectors(s.savedForInspect ? s.savedPos : driveCamPos, s.tmpPos, s.inspectAlpha);
+      if (s.savedForInspect) {
+        s.tmpMat.lookAt(s.tmpPos, inspectTarget, camera.up);
+        s.tmpQuat.setFromRotationMatrix(s.tmpMat);
+        camera.quaternion.slerpQuaternions(s.savedQuat, s.tmpQuat, s.inspectAlpha);
+      } else {
+        camera.lookAt(s.smoothedTarget);
+      }
     } else {
       // 100% rigid lock to smoothed target when driving — zero lag, zero wobble, zero dizziness
       camera.position.set(driveCamPos.x, driveCamPos.y, driveCamPos.z);
+      camera.lookAt(s.smoothedTarget);
     }
-
-    camera.lookAt(s.smoothedTarget);
   });
 
   return null;

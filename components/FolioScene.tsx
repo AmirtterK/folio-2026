@@ -1,7 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo, Suspense } from "react";
 import type { MutableRefObject } from "react";
+import dynamic from "next/dynamic";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Environment } from "@react-three/drei";
 import FolioCar from "@/components/FolioCar";
@@ -21,25 +22,26 @@ import {
 } from "@/components/Terrain";
 import * as THREE from "three";
 import Minimap from "@/components/Minimap";
-import HandGestures from "@/components/HandGestures";
-import AchievementTrophy from "@/components/AchievementTrophy";
+
+const HandGestures = dynamic(() => import("@/components/HandGestures"), { ssr: false });
 import ChessKnight from "@/components/ChessKnight";
 import NeuralNetworkHologram from "@/components/NeuralNetworkHologram";
+import PrinterInteractive from "@/components/PrinterInteractive";
+import GmailInteractive from "@/components/GmailInteractive";
+import DiplomaLandmark from "@/components/DiplomaLandmark";
+import LinkedInInteractive from "@/components/LinkedInInteractive";
 import CarLoadingHologram from "@/components/CarLoadingHologram";
-import LogoObstacle from "@/components/LogoObstacle";
 import MovableLogo from "@/components/MovableLogo";
 import { PhysicsProvider } from "@/components/PhysicsProvider";
+import ExampleModels from "@/components/ExampleModels";
 import { ClaudeCodeLogo } from "@/components/ClaudeCodeLogo";
 import { CodexLogo } from "@/components/CodexLogo";
 import { OpenAILogo } from "@/components/OpenAILogo";
 import * as R3FLogos from "@/components/r3f-logos";
-import { TROPHY_POS, KNIGHT_POS, NEURAL_POS } from "@/components/landmarkConfig";
+import { KNIGHT_POS, NEURAL_POS, PRINTER_POS, GMAIL_POS, DIPLOMA_POS, LINKEDIN_POS } from "@/components/landmarkConfig";
 
-type View = "track" | "smoke" | "html";
-type LandmarkId = "trophy" | "knight" | "neural";
-
-/** Trees, bushes, rocks and stones farther than this from the car are not drawn (free cam draws everything). */
-const SCENERY_RADIUS = 100;
+type View = "track" | "smoke";
+type LandmarkId = "knight" | "neural" | "printer" | "gmail" | "diploma" | "linkedin";
 
 /* ---------- Loading Overlay ---------- */
 
@@ -66,7 +68,7 @@ function LoadingScreen({ progress, visible }: { progress: number; visible: boole
         background: "#000000",
         transition: "opacity 0.5s ease-out",
         opacity: visible ? 1 : 0,
-        pointerEvents: visible ? "auto" : "none",
+        pointerEvents: "none",
       }}
     >
       <svg width={140} height={140} style={{ transform: "rotate(-90deg)" }}>
@@ -105,84 +107,70 @@ function LoadingScreen({ progress, visible }: { progress: number; visible: boole
   );
 }
 
-/* ---------- Free cam (orbit / pan / zoom around the map) ---------- */
+/* ---------- Fixed camera (locked position/orbit, rotate only) ---------- */
 
 function FreeCamControls({
   pose,
-  input,
+  input: _input,
   controlsRef: externalRef,
+  inspecting = false,
+  mobile = false,
 }: {
   pose: React.MutableRefObject<CarPose>;
   input: React.MutableRefObject<CarInput>;
   controlsRef?: React.MutableRefObject<any>;
+  inspecting?: boolean;
+  mobile?: boolean;
 }) {
-  const camera = useThree((s) => s.camera);
+  const { camera } = useThree();
   const internalRef = useRef<any>(null);
   const controlsRef = externalRef ?? internalRef;
-  const tmp = useMemo(
-    () => ({ fwd: new THREE.Vector3(), right: new THREE.Vector3(), move: new THREE.Vector3() }),
-    []
-  );
-  // Orbit around whatever the chase camera was looking at (the car) when free cam was opened.
-  // The camera keeps its current position, so entering free cam never jumps.
-  const target = useMemo(
-    () => new THREE.Vector3(pose.current.x, pose.current.y + 0.3, pose.current.z),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
+  // Start looking in this direction, attached to the car (orbit target follows car)
+  const baseDefaultDistance = 38;
+  const startDistance = mobile ? baseDefaultDistance : baseDefaultDistance * 0.95; // PC: zoom in 5% on start
+  const minDistance = 12;
+  const maxDistance = 80;
+  const viewDir = useMemo(() => new THREE.Vector3(-0.699, -0.12, -0.705).normalize(), []);
+  const carDelta = useMemo(() => new THREE.Vector3(), []);
 
-  // WASD fly the camera across the map (relative to where it is looking)
-  useFrame((_, delta) => {
-    const controls = controlsRef.current;
-    if (!controls) return;
-    const i = input.current;
-    const f = (i.fwd ? 1 : 0) - (i.back ? 1 : 0);
-    const r = (i.right ? 1 : 0) - (i.left ? 1 : 0);
-
-    if (f || r) {
-      const dt = Math.min(delta, 0.05);
-      // forward = camera look direction flattened onto the ground
-      camera.getWorldDirection(tmp.fwd);
-      tmp.fwd.y = 0;
-      if (tmp.fwd.lengthSq() < 1e-6) tmp.fwd.set(0, 0, -1);
-      tmp.fwd.normalize();
-      tmp.right.set(-tmp.fwd.z, 0, tmp.fwd.x);
-
-      // faster when zoomed out, slower when zoomed in close
-      const dist = camera.position.distanceTo(controls.target);
-      const speed = Math.max(6, dist * 0.9);
-
-      tmp.move
-        .set(0, 0, 0)
-        .addScaledVector(tmp.fwd, f)
-        .addScaledVector(tmp.right, r)
-        .normalize()
-        .multiplyScalar(speed * dt);
-      camera.position.add(tmp.move);
-      controls.target.add(tmp.move);
-    }
-
-    // keep camera and target above terrain (including hills)
-    const camMinY = groundHeight(camera.position.x, camera.position.z) + 1.2;
-    if (camera.position.y < camMinY) camera.position.y = camMinY;
-    const targetMinY = groundHeight(controls.target.x, controls.target.z) + 0.4;
-    if (controls.target.y < targetMinY) controls.target.y = targetMinY;
+  // Keep the orbit pivot on the car so camera stays attached and moves with it
+  useFrame(() => {
+    const c = controlsRef.current;
+    if (!c || inspecting) return;
+    const p = pose.current;
+    carDelta.set(p.x, p.y + 1.2, p.z).sub(c.target);
+    if (carDelta.lengthSq() < 1e-8) return;
+    c.target.add(carDelta);
+    camera.position.add(carDelta);
   });
+
+  // Place camera once at start looking in requested direction toward the car
+  useEffect(() => {
+    const initialTarget = new THREE.Vector3(pose.current.x, pose.current.y + 1.2, pose.current.z);
+    const offset = viewDir.clone().multiplyScalar(-startDistance);
+    camera.position.copy(initialTarget).add(offset);
+    camera.lookAt(initialTarget);
+    const c = controlsRef.current;
+    if (c) {
+      c.target.copy(initialTarget);
+      c.update();
+    }
+  }, [camera, controlsRef, viewDir, pose, startDistance]);
 
   return (
     <OrbitControls
       ref={controlsRef}
-      target={target}
+      makeDefault
+      enabled={!inspecting}
       enableDamping
       dampingFactor={0.08}
-      zoomSpeed={1.2}
-      panSpeed={1.1}
       rotateSpeed={0.8}
-      minDistance={2}
-      maxDistance={450}
-      minPolarAngle={0.01}
-      maxPolarAngle={Math.PI - 0.01}
-      screenSpacePanning={false} // right-drag slides across the map instead of up/down
+      enablePan={false}
+      enableZoom={true}
+      minDistance={minDistance}
+      maxDistance={maxDistance}
+      minPolarAngle={0.15}
+      maxPolarAngle={Math.PI / 2 - 0.08}
     />
   );
 }
@@ -192,10 +180,10 @@ const KEY_MAP: Record<string, keyof CarInput> = {
   ArrowUp: "fwd",
   KeyS: "back",
   ArrowDown: "back",
-  KeyA: "right",
-  ArrowLeft: "right",
-  KeyD: "left",
-  ArrowRight: "left",
+  KeyA: "left",
+  ArrowLeft: "left",
+  KeyD: "right",
+  ArrowRight: "right",
   Space: "brake",
 };
 
@@ -203,27 +191,8 @@ const KEY_MAP: Record<string, keyof CarInput> = {
 const CAM_KEYS: Record<string, "fwd" | "back" | "left" | "right"> = {
   KeyW: "fwd",
   KeyS: "back",
-  KeyA: "right",
-  KeyD: "left",
-};
-
-const BTN: React.CSSProperties = {
-  width: 58,
-  height: 58,
-  borderRadius: 16,
-  borderWidth: 2,
-  borderStyle: "solid",
-  borderColor: "#cfc8bd",
-  backgroundColor: "#fffdf9",
-  color: "#2a2622",
-  fontSize: 22,
-  cursor: "pointer",
-  userSelect: "none",
-  touchAction: "none",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+  KeyA: "left",
+  KeyD: "right",
 };
 
 const HINT: React.CSSProperties = {
@@ -240,6 +209,120 @@ const HINT: React.CSSProperties = {
   textShadow: "0 1px 3px rgba(255,255,255,0.8)",
 };
 
+function CameraDebugUpdater({
+  controlsRef,
+  posRef,
+  dirRef,
+  targetRef,
+}: {
+  controlsRef: MutableRefObject<any>;
+  posRef: MutableRefObject<HTMLDivElement | null>;
+  dirRef: MutableRefObject<HTMLDivElement | null>;
+  targetRef: MutableRefObject<HTMLDivElement | null>;
+}) {
+  const { camera } = useThree();
+  const dir = useMemo(() => new THREE.Vector3(), []);
+  const fmt = (n: number, d = 2) => n.toFixed(d);
+  useFrame(() => {
+    camera.getWorldDirection(dir);
+    const t = controlsRef.current?.target;
+    if (posRef.current) posRef.current.textContent = `pos: [${fmt(camera.position.x)}, ${fmt(camera.position.y)}, ${fmt(camera.position.z)}]`;
+    if (dirRef.current) dirRef.current.textContent = `dir: [${fmt(dir.x, 3)}, ${fmt(dir.y, 3)}, ${fmt(dir.z, 3)}]`;
+    if (targetRef.current) {
+      const tx = t ? t.x : camera.position.x + dir.x;
+      const ty = t ? t.y : camera.position.y + dir.y;
+      const tz = t ? t.z : camera.position.z + dir.z;
+      targetRef.current.textContent = `target: [${fmt(tx)}, ${fmt(ty)}, ${fmt(tz)}]`;
+    }
+  });
+  return null;
+}
+
+function Joystick({ input }: { input: MutableRefObject<CarInput> }) {
+  const baseRef = useRef<HTMLDivElement>(null);
+  const [knob, setKnob] = useState({ x: 0, y: 0 });
+  const active = useRef(false);
+  const radius = 46;
+  const knobRadius = 22;
+
+  const reset = () => {
+    active.current = false;
+    setKnob({ x: 0, y: 0 });
+    input.current.fwd = 0;
+    input.current.back = 0;
+    input.current.left = 0;
+    input.current.right = 0;
+  };
+
+  const update = (clientX: number, clientY: number) => {
+    const base = baseRef.current;
+    if (!base) return;
+    const rect = base.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    let dx = clientX - cx;
+    let dy = clientY - cy;
+    const dist = Math.hypot(dx, dy);
+    const max = radius - knobRadius / 2;
+    if (dist > max && dist > 0) {
+      dx = (dx / dist) * max;
+      dy = (dy / dist) * max;
+    }
+    setKnob({ x: dx, y: dy });
+
+    const nx = Math.max(-1, Math.min(1, dx / max));
+    const ny = Math.max(-1, Math.min(1, dy / max));
+    const dead = 0.18;
+    input.current.left = nx < -dead ? 1 : 0;
+    input.current.right = nx > dead ? 1 : 0;
+    input.current.fwd = ny < -dead ? 1 : 0;
+    input.current.back = ny > dead ? 1 : 0;
+  };
+
+  return (
+    <div
+      ref={baseRef}
+      onPointerDown={(e) => {
+        active.current = true;
+        (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+        update(e.clientX, e.clientY);
+      }}
+      onPointerMove={(e) => {
+        if (active.current) update(e.clientX, e.clientY);
+      }}
+      onPointerUp={reset}
+      onPointerCancel={reset}
+      style={{
+        width: radius * 2,
+        height: radius * 2,
+        borderRadius: "50%",
+        background: "rgba(255,253,249,0.78)",
+        border: "2px solid #cfc8bd",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+        position: "relative",
+        touchAction: "none",
+        userSelect: "none",
+      }}
+      aria-label="Drive joystick"
+    >
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          width: knobRadius * 2,
+          height: knobRadius * 2,
+          borderRadius: "50%",
+          background: "#2a2622",
+          border: "2px solid #111",
+          transform: `translate(calc(-50% + ${knob.x}px), calc(-50% + ${knob.y}px))`,
+          boxShadow: "0 2px 4px rgba(0,0,0,0.25)",
+        }}
+      />
+    </div>
+  );
+}
+
 export default function FolioScene() {
   const [view, setView] = useState<View>("track");
   const [color, setColor] = useState("#8d9196");
@@ -250,8 +333,11 @@ export default function FolioScene() {
   const [showMinimap, setShowMinimap] = useState(false);
   const [zoomMultiplier, setZoomMultiplier] = useState(1.0);
   const [carResetKey, setCarResetKey] = useState(0);
-  const [pressed, setPressed] = useState<Partial<Record<keyof CarInput, boolean>>>({});
-  const speedRef = useRef<HTMLSpanElement>(null);
+  // Temporary model rotation debug controls (degrees) - LinkedIn
+  const [linkedinRotDeg, setLinkedinRotDeg] = useState({ x: 90, y: 0, z: -50 });
+  const camPosRef = useRef<HTMLDivElement>(null);
+  const camDirRef = useRef<HTMLDivElement>(null);
+  const camTargetRef = useRef<HTMLDivElement>(null);
   const input = useRef<CarInput>({ fwd: 0, back: 0, left: 0, right: 0, brake: 0 });
   const pose = useRef<CarPose>({
     x: TRACK_START.x,
@@ -262,7 +348,9 @@ export default function FolioScene() {
   });
   const orbitControlsRef = useRef<any>(null);
   const [gestures, setGestures] = useState(false);
-  const [freeCam, setFreeCam] = useState(false);
+  // Always on: OrbitControls (drag + hand gestures) must own the camera. It was never set to true anywhere,
+  // so <FreeCamControls> never mounted and both drag and gestures had nothing to control.
+  const [freeCam, setFreeCam] = useState(true);
   const [isTouch, setIsTouch] = useState(false);
   const freeCamRef = useRef(false);
   freeCamRef.current = freeCam;
@@ -277,7 +365,14 @@ export default function FolioScene() {
   }, []);
 
   /* ---- Landmark inspection state: trophy, chess knight and neural network share the same flow ---- */
-  const [inspecting, setInspecting] = useState<LandmarkId | null>(null);
+  const [inspecting, setInspectingRaw] = useState<LandmarkId | null>(null);
+  // When inspection opens we stamp the time, so the click that opened it can't also bubble to the root
+  // div's "click anywhere closes inspection" handler and shut it again in the same gesture.
+  const inspectStartRef = useRef(0);
+  const setInspecting = useCallback((v: React.SetStateAction<LandmarkId | null>) => {
+    if (v) inspectStartRef.current = performance.now();
+    setInspectingRaw(v);
+  }, []);
   const [lastInspected, setLastInspected] = useState<LandmarkId | null>(null);
   useEffect(() => { if (inspecting) setLastInspected(inspecting); }, [inspecting]);
   const [nearLandmark, setNearLandmark] = useState<LandmarkId | null>(null);
@@ -296,30 +391,42 @@ export default function FolioScene() {
     if (!near) setInspecting((cur) => (cur === id ? null : cur));
   }, []);
 
-  // Standing view per landmark: camera at eye level, shifted right of the hologram (same heading, no
-  // turn), so the landmark sits on the left and its floating holographic writing sits beside it.
-  // The fov is 26, so 10 back frames the whole landmark on its shared base plus the text column.
-  // On mobile/touch portrait, center the landmark with writing above it and frame the full tall
-  // projector + hologram + text stack (projectors are tall) within view.
+  // Inspect views: camera looks in a consistent direction relative to each object.
+  // Objects framed toward left, text/right-side content toward right.
   const inspectViews = useMemo(() => {
+    const VIEW_DIR = new THREE.Vector3(-0.699, -0.12, -0.705).normalize();
+    const right = new THREE.Vector3().crossVectors(VIEW_DIR, new THREE.Vector3(0, 1, 0)).normalize();
+    const frameShift = right.clone().multiplyScalar(isTouch ? 1.2 : 1.5);
     const make = (x: number, z: number) => {
       const y = groundHeight(x, z);
-      if (isTouch) {
-        return {
-          target: new THREE.Vector3(x, y + 3.4, z),
-          cam: new THREE.Vector3(x, y + 4.0, z + 11.0),
-        };
-      }
-      const back = 10.0;
-      return {
-        target: new THREE.Vector3(x + 0.9, y + 2.3, z),
-        cam: new THREE.Vector3(x + 0.9, y + 2.4, z + back),
-      };
+      const dist = isTouch ? 11.0 : 10.0;
+      const target = new THREE.Vector3(x, y + (isTouch ? 3.2 : 2.3), z).add(frameShift);
+      const cam = target.clone().addScaledVector(VIEW_DIR, -dist);
+      cam.y += isTouch ? 0.6 : 0.2;
+      return { target, cam };
+    };
+    const makeContact = (x: number, z: number) => {
+      const y = groundHeight(x, z);
+      const dist = (isTouch ? 11.5 : 11.0) * 1.1; // +10% zoom out for contacts
+      const target = new THREE.Vector3(x, y + (isTouch ? 2.8 : 2.1), z).add(frameShift);
+      const cam = target.clone().addScaledVector(VIEW_DIR, -dist);
+      cam.y += isTouch ? 0.6 : 0.3;
+      return { target, cam };
+    };
+    const makeHover = (x: number, z: number, hoverY: number) => {
+      const dist = (isTouch ? 11.5 : 11.0) * 1.1; // +10% zoom out for diploma
+      const target = new THREE.Vector3(x, hoverY, z).add(frameShift);
+      const cam = target.clone().addScaledVector(VIEW_DIR, -dist);
+      cam.y += isTouch ? 0.6 : 0.3;
+      return { target, cam };
     };
     return {
-      trophy: make(TROPHY_POS.x, TROPHY_POS.z),
       knight: make(KNIGHT_POS.x, KNIGHT_POS.z),
       neural: make(NEURAL_POS.x, NEURAL_POS.z),
+      printer: makeContact(PRINTER_POS.x, PRINTER_POS.z),
+      gmail: makeContact(GMAIL_POS.x, GMAIL_POS.z),
+      diploma: makeHover(DIPLOMA_POS.x, DIPLOMA_POS.z, groundHeight(DIPLOMA_POS.x, DIPLOMA_POS.z) + 2.2),
+      linkedin: makeContact(LINKEDIN_POS.x, LINKEDIN_POS.z),
     };
   }, [isTouch]);
 
@@ -334,11 +441,9 @@ export default function FolioScene() {
       const onStart = (e: TouchEvent) => {
         const t = e.touches[0];
         if (!t) return;
-        e.preventDefault();
         startRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
       };
       const onEnd = (e: TouchEvent) => {
-        e.preventDefault();
         const s = startRef.current;
         startRef.current = null;
         if (!s) return;
@@ -373,11 +478,17 @@ export default function FolioScene() {
           const id = hit.object.userData.landmark as LandmarkId;
           const p = pose.current;
           const landmarkPos =
-            id === "trophy"
-              ? { x: TROPHY_POS.x, z: TROPHY_POS.z }
-              : id === "knight"
+            id === "knight"
               ? { x: KNIGHT_POS.x, z: KNIGHT_POS.z }
-              : { x: NEURAL_POS.x, z: NEURAL_POS.z };
+              : id === "neural"
+              ? { x: NEURAL_POS.x, z: NEURAL_POS.z }
+              : id === "printer"
+              ? { x: PRINTER_POS.x, z: PRINTER_POS.z }
+              : id === "gmail"
+              ? { x: GMAIL_POS.x, z: GMAIL_POS.z }
+              : id === "diploma"
+              ? { x: DIPLOMA_POS.x, z: DIPLOMA_POS.z }
+              : { x: LINKEDIN_POS.x, z: LINKEDIN_POS.z };
           const dist = Math.hypot(p.x - landmarkPos.x, p.z - landmarkPos.z);
           if (dist < 7.0) {
             setInspecting(id);
@@ -441,8 +552,6 @@ export default function FolioScene() {
 
   const set = (k: keyof CarInput, v: 0 | 1) => {
     input.current[k] = v;
-    // return the same object when nothing changed, so key auto-repeat doesn't re-render the whole scene every keydown
-    setPressed((p) => (!!p[k] === !!v ? p : { ...p, [k]: !!v }));
   };
 
   const resetCar = useCallback(() => {
@@ -463,7 +572,7 @@ export default function FolioScene() {
       if (typing) return;
       // The car dropdown keeps focus after a pick. Let it handle menu navigation, but any other
       // key should blur it and reach the game shortcuts instead of the select's type-ahead
-      // jumping to "Ferrari" / "Renault" and silently changing the car.
+      // jumping to another car and silently changing the car.
       if (tag === "SELECT") {
         const menuKeys = [
           "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
@@ -489,27 +598,11 @@ export default function FolioScene() {
         return;
       }
 
-      // Free cam: F toggles, Esc exits
-      if (e.code === "KeyF" && !e.repeat) {
-        e.preventDefault();
-        setInspecting(null);
-        setFreeCam((v) => !v);
-        return;
-      }
-      // Hand gestures: G toggles and auto-activates free cam
+      // Hand gestures: G toggles
       if (e.code === "KeyG" && !e.repeat) {
         e.preventDefault();
         setInspecting(null);
-        setGestures((v) => {
-          const next = !v;
-          if (next) setFreeCam(true);
-          return next;
-        });
-        return;
-      }
-      if (e.code === "Escape" && freeCamRef.current) {
-        setFreeCam(false);
-        e.preventDefault();
+        setGestures((v) => !v);
         return;
       }
 
@@ -522,12 +615,10 @@ export default function FolioScene() {
         }
       }
 
-      // Free cam: WASD moves the camera, arrows (handled below) still drive the car
+      // Fixed camera mode: WASD/arrow keys still drive the car only (camera stays locked)
       const camK = CAM_KEYS[e.code];
-      if (freeCamRef.current && camK) {
-        camKeys.current[camK] = 1;
-        e.preventDefault();
-        return;
+      if (camK) {
+        // ignore camera movement keys
       }
 
       const k = KEY_MAP[e.code];
@@ -537,7 +628,7 @@ export default function FolioScene() {
       }
       if (e.code === "Enter" || e.code === "NumpadEnter") {
         const near = nearLandmarkRef.current;
-        if (near && !freeCamRef.current) {
+        if (near) {
           setInspecting(near);
           e.preventDefault();
         }
@@ -560,56 +651,13 @@ export default function FolioScene() {
     };
   }, [resetCar, showMinimap]);
 
-  // Mouse wheel zoom in track view
-  const handleWheel = useCallback(
-    (e: WheelEvent) => {
-      if (view !== "track" || freeCamRef.current) return; // free cam zooms via OrbitControls
-      setZoomMultiplier((z) => Math.min(1.8, Math.max(0.65, z + e.deltaY * 0.001)));
-    },
-    [view]
-  );
-
-  // Leaving the track view always ends free cam and closes the full-screen map.
+  // Leaving the track view closes the full-screen map.
   useEffect(() => {
     if (view !== "track") {
-      setFreeCam(false);
       setShowMinimap(false);
+      setInspecting(null);
     }
   }, [view]);
-
-  // Entering/leaving free cam: drop any held movement so nothing gets stuck or drives off
-  useEffect(() => {
-    camKeys.current.fwd = camKeys.current.back = camKeys.current.left = camKeys.current.right = 0;
-    set("fwd", 0);
-    set("back", 0);
-    set("left", 0);
-    set("right", 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [freeCam]);
-
-  useEffect(() => {
-    window.addEventListener("wheel", handleWheel, { passive: true });
-    return () => window.removeEventListener("wheel", handleWheel);
-  }, [handleWheel]);
-
-  const hold = (k: keyof CarInput, label: string, aria: string) => (
-    <button
-      aria-label={aria}
-      className="folio-drive-btn"
-      style={{
-        ...BTN,
-        ...(pressed[k] ? { backgroundColor: "#111111", color: "#fff", borderColor: "#111111" } : {}),
-      }}
-      onPointerDown={(e) => {
-        e.currentTarget.setPointerCapture(e.pointerId);
-        set(k, 1);
-      }}
-      onPointerUp={() => set(k, 0)}
-      onPointerCancel={() => set(k, 0)}
-    >
-      {label}
-    </button>
-  );
 
   const tab = (id: View, text: string) => (
     <button
@@ -633,11 +681,7 @@ export default function FolioScene() {
     </button>
   );
 
-  const onSpeed = (s: number) => {
-    if (speedRef.current) speedRef.current.textContent = Math.abs(s).toFixed(1);
-  };
 
-  const is3d = view !== "html";
 
   return (
     <div
@@ -645,10 +689,10 @@ export default function FolioScene() {
       data-touch={isTouch ? "true" : "false"}
       style={{ position: "fixed", inset: 0, backgroundColor: night ? "#0a1238" : "#cbe2f2" }}
       onClick={() => {
-        if (inspectingRef.current) setInspecting(null);
+        if (inspectingRef.current && performance.now() - inspectStartRef.current > 400) setInspecting(null);
       }}
     >
-      {is3d && canvasDeferred ? (
+      {canvasDeferred && (
         <Canvas
           key={view === "track" ? "track" : "lab"}
           shadows
@@ -697,7 +741,8 @@ export default function FolioScene() {
                 shadow-normalBias={0.03}
               />
               <RacingTrack showCurbs={showCurbs} night={night} withTerrain={true} pose={pose} />
-              <Terrain pose={pose} radius={freeCam ? Infinity : SCENERY_RADIUS} />
+              <Terrain />
+              <ExampleModels />
               <ChessKnight
                 pose={pose}
                 night={night}
@@ -714,13 +759,42 @@ export default function FolioScene() {
                 onInspectToggle={(on) => setInspecting(on ? "neural" : null)}
                 touch={isTouch}
               />
-              <AchievementTrophy
+              <PrinterInteractive
                 pose={pose}
                 night={night}
-                inspecting={inspecting === "trophy"}
-                onNearChange={(near) => handleLandmarkNearChange("trophy", near)}
-                onInspectToggle={(on) => setInspecting(on ? "trophy" : null)}
+                inspecting={inspecting === "printer"}
+                onNearChange={(near) => handleLandmarkNearChange("printer", near)}
+                onInspectToggle={(on) => setInspecting(on ? "printer" : null)}
                 touch={isTouch}
+              />
+              <GmailInteractive
+                pose={pose}
+                night={night}
+                inspecting={inspecting === "gmail"}
+                onNearChange={(near) => handleLandmarkNearChange("gmail", near)}
+                onInspectToggle={(on) => setInspecting(on ? "gmail" : null)}
+                touch={isTouch}
+              />
+              <DiplomaLandmark
+                pose={pose}
+                night={night}
+                inspecting={inspecting === "diploma"}
+                onNearChange={(near) => handleLandmarkNearChange("diploma", near)}
+                onInspectToggle={(on) => setInspecting(on ? "diploma" : null)}
+                touch={isTouch}
+              />
+              <LinkedInInteractive
+                pose={pose}
+                night={night}
+                inspecting={inspecting === "linkedin"}
+                onNearChange={(near) => handleLandmarkNearChange("linkedin", near)}
+                onInspectToggle={(on) => setInspecting(on ? "linkedin" : null)}
+                touch={isTouch}
+                debugRotation={{
+                  x: (linkedinRotDeg.x * Math.PI) / 180,
+                  y: (linkedinRotDeg.y * Math.PI) / 180,
+                  z: (linkedinRotDeg.z * Math.PI) / 180,
+                }}
               />
               <MobileTapHandler pose={pose} />
               <CarLoadingHologram pose={pose} visible={!carLoaded} night={night} />
@@ -761,9 +835,10 @@ export default function FolioScene() {
                 const colOffset = col - (itemsInRow - 1) / 2; // centers last row when it has 2
                 const x = 26 - row * 7.2;
                 const z = 57 + colOffset * 3.3;
+                const logoRotation: [number, number, number] = [0.017453, 0.872665, 0]; // X:1°, Y:50°, Z:0°
                 return (
                   <MovableLogo key={i} position={[x, 0, z]}>
-                    <Logo size={3} />
+                    <Logo size={3} rotation={logoRotation} />
                   </MovableLogo>
                 );
               })}
@@ -772,7 +847,6 @@ export default function FolioScene() {
                 color={color}
                 keyboard={false}
                 input={inspecting || !carLoaded ? emptyInput : input}
-                onSpeed={onSpeed}
                 smoke={smokeOn && carLoaded}
                 terrain={groundHeight}
                 grip={groundGrip}
@@ -780,8 +854,8 @@ export default function FolioScene() {
                 pose={pose}
                 bounds={TERRAIN_BOUNDS}
                 start={TRACK_START}
-                maxSpeed={18}
-                carScale={0.9009}
+                maxSpeed={24}
+                carScale={1.1396}
                 model={carModel}
                 headlights={night}
                 onReady={handleSceneReady}
@@ -794,21 +868,22 @@ export default function FolioScene() {
                 inspectTarget={inspecting ? inspectViews[inspecting].target : (lastInspected ? inspectViews[lastInspected].target : undefined)}
                 inspectCamPos={inspecting ? inspectViews[inspecting].cam : (lastInspected ? inspectViews[lastInspected].cam : undefined)}
                 freeCam={freeCam}
+                controlsRef={orbitControlsRef}
               />
-              {freeCam && <FreeCamControls pose={pose} input={camKeys} controlsRef={orbitControlsRef} />}
+              {freeCam && <FreeCamControls pose={pose} input={camKeys} controlsRef={orbitControlsRef} inspecting={!!inspecting} mobile={isTouch} />}
+              <CameraDebugUpdater controlsRef={orbitControlsRef} posRef={camPosRef} dirRef={camDirRef} targetRef={camTargetRef} />
             </></PhysicsProvider>
           ) : (
             <>
               <ambientLight intensity={0.8} />
               <hemisphereLight args={["#ffffff", "#555555", 0.5]} />
               <directionalLight position={[4, 7, 5]} intensity={1.2} />
-              <FolioCar key={carModel} color={color} keyboard={false} input={carLoaded ? input : emptyInput} onSpeed={onSpeed} smoke={smokeOn && carLoaded} carScale={1.386} model={carModel} onReady={handleSceneReady} />
-              <OrbitControls target={[0, 1, 0]} />
+              <FolioCar key={carModel} color={color} keyboard={false} input={carLoaded ? input : emptyInput} smoke={smokeOn && carLoaded} carScale={1.7534} model={carModel} onReady={handleSceneReady} maxSpeed={24} />
+              <OrbitControls ref={orbitControlsRef} target={[0, 1, 0]} minPolarAngle={0.15} maxPolarAngle={Math.PI / 2 - 0.08} />
+              <CameraDebugUpdater controlsRef={orbitControlsRef} posRef={camPosRef} dirRef={camDirRef} targetRef={camTargetRef} />
             </>
           )}
         </Canvas>
-      ) : is3d ? null : (
-        <iframe title="Classic car" src="/classic-car.html" style={{ width: "100%", height: "100%", border: 0 }} />
       )}
 
       {/* Top Header Controls Bar */}
@@ -831,76 +906,52 @@ export default function FolioScene() {
       >
         {tab("track", "Racing Track")}
         {tab("smoke", "Detailed Car")}
-        {tab("html", "Classic (HTML)")}
 
-        {is3d && (
-          <label
+        <label
+          style={{
+            display: "flex",
+            gap: 6,
+            alignItems: "center",
+            marginLeft: 8,
+            color: "#2a2622",
+            fontSize: 13,
+            fontWeight: 600,
+          }}
+        >
+          Car
+          <select
+            className="folio-select"
+            value={carModel}
+            onChange={(e) => {
+              const next = e.target.value as CarModel;
+              if (next === carModel) return;
+              setCarLoaded(false); // keep the new car still (and light/smoke-free) until its GLB is in
+              setCarModel(next);
+              resetCar(); // respawn on the grid with the new car
+              e.currentTarget.blur();
+            }}
             style={{
-              display: "flex",
-              gap: 6,
-              alignItems: "center",
-              marginLeft: 8,
+              padding: "6px 10px",
+              borderRadius: 9,
+              border: "1.5px solid #cfc8bd",
+              backgroundColor: "#fffdf9",
               color: "#2a2622",
-              fontSize: 13,
+              font: "inherit",
+              fontSize: 12.5,
               fontWeight: 600,
+              cursor: "pointer",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
             }}
           >
-            Car
-            <select
-              className="folio-select"
-              value={carModel}
-              onChange={(e) => {
-                const next = e.target.value as CarModel;
-                if (next === carModel) return;
-                setCarLoaded(false); // keep the new car still (and light/smoke-free) until its GLB is in
-                setCarModel(next);
-                resetCar(); // respawn on the grid with the new car
-                e.currentTarget.blur();
-              }}
-              style={{
-                padding: "6px 10px",
-                borderRadius: 9,
-                border: "1.5px solid #cfc8bd",
-                backgroundColor: "#fffdf9",
-                color: "#2a2622",
-                font: "inherit",
-                fontSize: 12.5,
-                fontWeight: 600,
-                cursor: "pointer",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-              }}
-            >
-              <option value="ferrari">Ferrari F599</option>
-              <option value="r17">Renault R17</option>
-              <option value="sf90">Ferrari SF90</option>
-              <option value="nissan">Nissan Silvia S15</option>
-              <option value="porsche">Porsche Panamera</option>
-              <option value="corvette">Corvette Stingray</option>
-            </select>
-          </label>
-        )}
+            <option value="ferrari">Ferrari F599</option>
+            <option value="sf90">Ferrari SF90</option>
+            <option value="nissan">Nissan Silvia S15</option>
+            <option value="porsche">Porsche Panamera</option>
+            <option value="corvette">Corvette Stingray</option>
+          </select>
+        </label>
 
-        {is3d && carModel === "r17" && (
-          <label
-            style={{
-              display: "flex",
-              gap: 6,
-              alignItems: "center",
-              marginLeft: 8,
-              color: "#2a2622",
-              fontSize: 13,
-              fontWeight: 600,
-            }}
-          >
-            Paint
-            <input
-              type="color"
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-              style={{ width: 28, height: 28, border: "none", borderRadius: 6, cursor: "pointer" }}
-            />
-          </label>
-        )}
+
 
         {(view === "smoke" || view === "track") && (
           <label
@@ -984,29 +1035,7 @@ export default function FolioScene() {
               Map
             </button>
 
-            <button
-              onClick={() => {
-                setInspecting(null);
-                setFreeCam((v) => !v);
-              }}
-              title="Free cam: orbit, pan and zoom around the map. Press F or Esc to return."
-              style={{
-                padding: "7px 12px",
-                borderRadius: 9,
-                borderWidth: 1.5,
-                borderStyle: "solid",
-                borderColor: freeCam ? "#111111" : "#cfc8bd",
-                backgroundColor: freeCam ? "#111111" : "#fffdf9",
-                color: freeCam ? "#ffffff" : "#2a2622",
-                fontSize: 12.5,
-                fontWeight: 600,
-                cursor: "pointer",
-                marginLeft: 4,
-                boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-              }}
-            >
-              {freeCam ? "Exit free cam [F]" : "Free cam [F]"}
-            </button>
+
 
             <button
               onClick={resetCar}
@@ -1031,17 +1060,13 @@ export default function FolioScene() {
           </>
         )}
 
-        {is3d && view === "track" && (
+        {view === "track" && (
           <button
             onClick={() => {
               setInspecting(null);
-              setGestures((v) => {
-                const next = !v;
-                if (next) setFreeCam(true);
-                return next;
-              });
+              setGestures((v) => !v);
             }}
-            title="Hand gestures: control camera in free cam (press G)."
+            title="Hand gestures: rotate the fixed camera (press G)."
             style={{
               padding: "7px 12px",
               borderRadius: 9,
@@ -1062,57 +1087,24 @@ export default function FolioScene() {
         )}
       </div>
 
-      {is3d && (
-        <>
-          <div
-            className="folio-speed"
-            style={{
-              position: "fixed",
-              bottom: 92,
-              right: 20,
-              color: "#2a2622",
-              backgroundColor: "rgba(255,253,249,0.85)",
-              padding: "6px 14px",
-              borderRadius: 10,
-              border: "1.5px solid #cfc8bd",
-              fontSize: 14,
-              fontWeight: 600,
-              zIndex: 10,
-              boxShadow: "0 2px 6px rgba(0,0,0,0.06)",
-            }}
-          >
-            Speed <span ref={speedRef} style={{ fontSize: 18, fontWeight: 700, color: "#111111" }}>0.0</span> u/s
-          </div>
-
-          {/* On-screen touch buttons for mobile / mouse */}
-          <div
-            className="folio-touch"
-            style={{
-              position: "fixed",
-              bottom: 18,
-              left: 20,
-              right: 20,
-              display: "flex",
-              justifyContent: "space-between",
-              pointerEvents: "none",
-              zIndex: 10,
-            }}
-          >
-            <div className="folio-touch-group" style={{ display: "flex", gap: 10, pointerEvents: "auto" }}>
-              {hold("fwd", "\u25B2", "Forward")}
-              {hold("back", "\u25BC", "Reverse")}
-            </div>
-            <div className="folio-touch-group" style={{ display: "flex", gap: 10, pointerEvents: "auto" }}>
-              {hold("left", "\u25C0", "Steer left")}
-              {hold("right", "\u25B6", "Steer right")}
-            </div>
-          </div>
-        </>
+      {/* Joystick controller on left side (mobile only) */}
+      {isTouch && (
+        <div
+          className="folio-joystick-wrap"
+          style={{
+            position: "fixed",
+            left: 18,
+            bottom: "max(18px, env(safe-area-inset-bottom))",
+            zIndex: 10,
+            pointerEvents: "auto",
+            touchAction: "none",
+          }}
+        >
+          <Joystick input={input} />
+        </div>
       )}
 
-      {/* Stays mounted while gestures are on (even if free cam is toggled) so the camera + model are not
-          torn down and reloaded each time. It only moves the camera while free cam's OrbitControls exist. */}
-      {is3d && view === "track" && gestures && (
+      {view === "track" && gestures && (
         <HandGestures controlsRef={orbitControlsRef} enabled={true} />
       )}
 
@@ -1127,14 +1119,84 @@ export default function FolioScene() {
 
       {view === "track" && (
         <div className="folio-hint" style={night ? { ...HINT, color: "#c9d1ff", textShadow: "0 1px 3px rgba(0,0,0,0.8)" } : HINT}>
-          {freeCam
-            ? "FREE CAM | WASD to move camera | Arrows to drive | Drag to orbit | Right-drag to pan | Scroll to zoom | F or Esc to go back"
-            : "WASD or Arrow Keys to steer | Space to brake | Scroll wheel to zoom | M for map | R to reset | F for free cam"}
+          Drag (or use gestures) to look around from a fixed camera | WASD or Arrow Keys to drive | Space to brake | M for map | R to reset
         </div>
       )}
 
       {/* Loading overlay -- covers everything until the car is in the scene */}
       <LoadingScreen progress={loadProgress} visible={!sceneReady} />
+
+      {/* Live camera debug */}
+      <div
+        style={{
+          position: "fixed",
+          right: 12,
+          bottom: 12,
+          zIndex: 60,
+          background: "rgba(0,0,0,0.72)",
+          color: "#fff",
+          border: "1px solid rgba(255,255,255,0.2)",
+          borderRadius: 10,
+          padding: "10px 12px",
+          fontSize: 12,
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+          width: 320,
+          backdropFilter: "blur(6px)",
+          pointerEvents: "none",
+        }}
+      >
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>Camera (live)</div>
+        <div ref={camPosRef}>pos: [0.00, 0.00, 0.00]</div>
+        <div ref={camDirRef}>dir: [0.000, 0.000, -1.000]</div>
+        <div ref={camTargetRef}>target: [0.00, 0.00, 0.00]</div>
+      </div>
+
+      {/* Temporary model rotation debug controls (LinkedIn) */}
+      <div
+        style={{
+          position: "fixed",
+          left: 12,
+          bottom: 12,
+          zIndex: 60,
+          background: "rgba(0,0,0,0.72)",
+          color: "#fff",
+          border: "1px solid rgba(255,255,255,0.2)",
+          borderRadius: 10,
+          padding: "10px 12px",
+          fontSize: 12,
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+          width: 320,
+          backdropFilter: "blur(6px)",
+        }}
+      >
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>LinkedIn rotation (temp)</div>
+        {(["x", "y", "z"] as const).map((axis) => (
+          <label key={axis} style={{ display: "grid", gridTemplateColumns: "18px 1fr 56px", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <span>{axis.toUpperCase()}</span>
+            <input
+              type="range"
+              min={-180}
+              max={180}
+              step={1}
+              value={linkedinRotDeg[axis]}
+              onChange={(e) => setLinkedinRotDeg((r) => ({ ...r, [axis]: Number(e.target.value) }))}
+            />
+            <input
+              type="number"
+              value={linkedinRotDeg[axis]}
+              step={1}
+              onChange={(e) => setLinkedinRotDeg((r) => ({ ...r, [axis]: Number(e.target.value) }))}
+              style={{ width: 56, background: "#111", color: "#fff", border: "1px solid #444", borderRadius: 4, padding: "2px 4px" }}
+            />
+          </label>
+        ))}
+        <div style={{ marginTop: 6, lineHeight: 1.35, wordBreak: "break-all", opacity: 0.95 }}>
+          {`clone.rotation.set(${((linkedinRotDeg.x * Math.PI) / 180).toFixed(6)}, ${((linkedinRotDeg.y * Math.PI) / 180).toFixed(6)}, ${((linkedinRotDeg.z * Math.PI) / 180).toFixed(6)});`}
+        </div>
+        <div style={{ marginTop: 2, opacity: 0.8 }}>
+          {`// X: ${linkedinRotDeg.x}°, Y: ${linkedinRotDeg.y}°, Z: ${linkedinRotDeg.z}°`}
+        </div>
+      </div>
 
       {/* Global CSS keyframes and responsive layout for DOM overlays */}
       <style>{`
@@ -1149,7 +1211,14 @@ export default function FolioScene() {
         }
         .folio-toolbar::-webkit-scrollbar { display: none; }
 
-        canvas { touch-action: manipulation; }
+        canvas { touch-action: none; }
+
+        /* Grab cursor for drag-to-orbit. It lives on <body> and the canvas inherits it, so anything that sets
+           document.body.style.cursor (e.g. the Enter key's "pointer" on hover) still wins via the inline style. */
+        body { cursor: grab; }
+        body:active { cursor: grabbing; }
+        canvas { cursor: inherit; }
+        .folio-toolbar, .folio-speed, .folio-touch-group { cursor: default; }
 
         @media (max-width: 760px), (pointer: coarse) and (max-height: 600px) {
           .folio-toolbar {
@@ -1186,26 +1255,8 @@ export default function FolioScene() {
             padding: 5px 8px !important;
             font-size: 12px !important;
           }
-          .folio-speed {
-            top: auto !important;
-            bottom: max(70px, calc(env(safe-area-inset-bottom) + 62px)) !important;
-            right: 10px !important;
-            padding: 4px 10px !important;
-            font-size: 12px !important;
-          }
-          .folio-speed span { font-size: 16px !important; }
-          .folio-touch {
-            bottom: max(10px, env(safe-area-inset-bottom)) !important;
-            left: 10px !important;
-            right: 10px !important;
-          }
-          .folio-touch-group { gap: 8px !important; }
-          .folio-drive-btn {
-            width: 52px !important;
-            height: 52px !important;
-            border-radius: 14px !important;
-            font-size: 20px !important;
-          }
+
+
           .folio-hint { display: none !important; }
         }
 
@@ -1224,14 +1275,9 @@ export default function FolioScene() {
             font-size: 11px !important;
           }
           .folio-toolbar .folio-select { max-width: 132px; }
-          .folio-speed { bottom: max(66px, calc(env(safe-area-inset-bottom) + 58px)) !important; }
-          .folio-drive-btn {
-            width: 48px !important;
-            height: 48px !important;
-            font-size: 18px !important;
-          }
         }
       `}</style>
     </div>
   );
 }
+

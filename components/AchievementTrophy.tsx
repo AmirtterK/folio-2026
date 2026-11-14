@@ -423,7 +423,7 @@ export default function AchievementTrophy({
   const holo = { hologramColor: HOLO, hologramBrightness: 1.3, scanlineSize: 8, enableAdditive: night };
 
   return (
-    <group position={[TROPHY_POS.x, y, TROPHY_POS.z]}>
+    <group position={[TROPHY_POS.x, y, TROPHY_POS.z]} rotation={[0, (Math.PI * 50) / 180, 0]}>
       {/* Invisible tap hitbox so the whole landmark (not just the prompt) is tappable on mobile */}
       <mesh
         position={[0, 2, 0]}

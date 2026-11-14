@@ -148,7 +148,7 @@ export default function ChessKnight({
   const holo = { hologramColor: HOLO_COLOR, hologramBrightness: 1.3, scanlineSize: 8, enableAdditive: night, ...hologram };
 
   return (
-    <group position={[KNIGHT_POS.x, y, KNIGHT_POS.z]}>
+    <group position={[KNIGHT_POS.x, y, KNIGHT_POS.z]} rotation={[0, (Math.PI * 50) / 180, 0]}>
       {/* Invisible tap hitbox so the whole landmark is tappable on mobile */}
       <mesh
         position={[0, 2, 0]}

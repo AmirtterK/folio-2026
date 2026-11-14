@@ -11,8 +11,27 @@ export const KNIGHT_POS = {
   yaw: Math.PI,
 };
 
-/** Achievement trophy milestone, after chess knight, on the track curve */
-export const TROPHY_POS = {
-  x: -77.65,
-  z: 51.36,
+/** Ricoh printer (resume) - in a row near the robot arm, off the track */
+export const PRINTER_POS = {
+  x: -34,
+  z: 35,
+};
+
+/** Gmail mailbox (email) - in a row near the robot arm, off the track */
+export const GMAIL_POS = {
+  x: -14,
+  z: 35,
+};
+
+/** Diploma - before the LinkedIn object, off the track */
+export const DIPLOMA_POS = {
+  x: 60,
+  z: 35,
+  rotY: 0,
+};
+
+/** LinkedIn logo - in a row near the robot arm, off the track */
+export const LINKEDIN_POS = {
+  x: 6,
+  z: 35,
 };

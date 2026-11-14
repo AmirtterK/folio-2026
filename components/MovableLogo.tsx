@@ -8,6 +8,14 @@ import type { ReactNode } from "react";
 import { groundHeight } from "@/components/Terrain";
 import { usePhysics, isWorldFreed } from "@/components/PhysicsProvider";
 
+// How the logos fall after a crash throws them up. World gravity is 0, so it is done by hand here.
+// Slow, floaty gravity: a launched logo hangs for a few seconds, then drifts back down and lands softly.
+const LOGO_GRAVITY = 4.5; // m/s^2 (~0.45 g)
+const LOGO_MAX_FALL = 5; // m/s: fastest they ever fall (slow descent)
+const LOGO_MAX_RISE = 14; // m/s: cap on how hard a crash can throw them upward
+const LOGO_AIR_DRAG = 0.35; // 1/s: light drag on vertical motion so the throw stays floaty
+const LOGO_SLIDE_DAMP = 2.5; // 1/s: horizontal friction (same value that used to be Rapier's linear damping)
+
 type MovableLogoProps = {
   position: [number, number, number];
   children: ReactNode;
@@ -24,7 +32,7 @@ export default function MovableLogo({ position, children }: MovableLogoProps) {
     const body = world.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic()
         .setTranslation(position[0], groundHeight(position[0], position[2]) + 2.0, position[2])
-        .setLinearDamping(2.5)
+        .setLinearDamping(0) // damped by hand in useFrame: floaty vertically, grippy horizontally
         .setAngularDamping(2.0)
     );
     world.createCollider(RAPIER.ColliderDesc.cuboid(1.5, 1.5, 0.5), body);
@@ -46,7 +54,7 @@ export default function MovableLogo({ position, children }: MovableLogoProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [world]);
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     const body = bodyRef.current;
     const g = ref.current;
     if (!body || !g) return;
@@ -56,8 +64,12 @@ export default function MovableLogo({ position, children }: MovableLogoProps) {
     }
     const t = body.translation();
     const r = body.rotation();
-    // slow falldown: apply downward impulse so pushed logos settle
-    body.applyImpulse({ x: 0, y: -0.5, z: 0 }, true);
+    // constant slow fall (low gravity, frame-rate independent): thrown-up logos hang, then sink back down
+    const dt = Math.min(delta, 0.05);
+    const v = body.linvel();
+    const vy = THREE.MathUtils.clamp((v.y - LOGO_GRAVITY * dt) * Math.exp(-LOGO_AIR_DRAG * dt), -LOGO_MAX_FALL, LOGO_MAX_RISE);
+    const slide = Math.exp(-LOGO_SLIDE_DAMP * dt);
+    body.setLinvel({ x: v.x * slide, y: vy, z: v.z * slide }, true);
     // clamp to terrain surface so they don't fall through
     const ground = groundHeight(t.x, t.z) + 2.0;
     if (t.y < ground) {

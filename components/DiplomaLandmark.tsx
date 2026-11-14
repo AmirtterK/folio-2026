@@ -87,7 +87,7 @@ export default function DiplomaLandmark({
     holoAnchor[1] + KEY_PROMPT_OFFSET_FROM_HOLOGRAM[1],
     holoAnchor[2] + KEY_PROMPT_OFFSET_FROM_HOLOGRAM[2],
   ];
-  const textY = promptPos[1] - (0.5 + DIPLOMA_LINES.length * 0.13);
+  const textY = promptPos[1] - (0.9 + DIPLOMA_LINES.length * 0.16);
 
   return (
     <group ref={groupRef} position={[DIPLOMA_POS.x, baseY, DIPLOMA_POS.z]}>

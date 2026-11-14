@@ -79,7 +79,7 @@ export default function GmailInteractive({
     holoAnchor[1] + KEY_PROMPT_OFFSET_FROM_HOLOGRAM[1],
     holoAnchor[2] + KEY_PROMPT_OFFSET_FROM_HOLOGRAM[2],
   ];
-  const textY = promptPos[1] - (0.7 + GMAIL_LINES.length * 0.16);
+  const textY = promptPos[1] - (0.9 + GMAIL_LINES.length * 0.16);
 
   return (
     <group position={[GMAIL_POS.x, y, GMAIL_POS.z]}>

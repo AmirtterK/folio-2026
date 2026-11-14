@@ -79,7 +79,7 @@ export default function PrinterInteractive({
     holoAnchor[1] + KEY_PROMPT_OFFSET_FROM_HOLOGRAM[1],
     holoAnchor[2] + KEY_PROMPT_OFFSET_FROM_HOLOGRAM[2],
   ];
-  const textY = promptPos[1] - (0.7 + PRINTER_LINES.length * 0.16);
+  const textY = promptPos[1] - (0.9 + PRINTER_LINES.length * 0.16);
 
   return (
     <group position={[PRINTER_POS.x, y, PRINTER_POS.z]}>

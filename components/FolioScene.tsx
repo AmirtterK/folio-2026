@@ -392,8 +392,8 @@ function Joystick({ input }: { input: MutableRefObject<CarInput> }) {
   const baseRef = useRef<HTMLDivElement>(null);
   const [knob, setKnob] = useState({ x: 0, y: 0 });
   const active = useRef(false);
-  const radius = 46;
-  const knobRadius = 22;
+  const radius = 68;
+  const knobRadius = 30;
 
   const reset = () => {
     active.current = false;

@@ -207,6 +207,8 @@ export default function HoloKeyPrompt({
   const orbRef = useRef<THREE.Group>(null);
   const keycapRef = useRef<THREE.Group>(null);
   const nearness = useRef(0);
+  const worldQuat = useRef(new THREE.Quaternion());
+  const parentWorldQuat = useRef(new THREE.Quaternion());
   const [hovered, setHovered] = useState(false);
   const hoveredRef = useRef(false);
   hoveredRef.current = hovered;
@@ -301,7 +303,13 @@ export default function HoloKeyPrompt({
 
     if (groupRef.current) {
       groupRef.current.position.y = position[1] + Math.sin(t * 1.6) * 0.035;
-      groupRef.current.quaternion.copy(state.camera.quaternion);
+      // Billboard in world space, accounting for rotated parents (e.g. project landmarks)
+      worldQuat.current.copy(state.camera.quaternion);
+      if (groupRef.current.parent) {
+        groupRef.current.parent.getWorldQuaternion(parentWorldQuat.current);
+        worldQuat.current.premultiply(parentWorldQuat.current.invert());
+      }
+      groupRef.current.quaternion.copy(worldQuat.current);
     }
     if (orbRef.current) {
       const s = Math.max(0.001, 1 - ne);

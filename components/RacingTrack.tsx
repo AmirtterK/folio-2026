@@ -706,21 +706,24 @@ function BuildingsRing() {
     };
   }, [asian.scene, sf.scene, chicago.scene, gameReady.scene]);
 
-  // Arrange outside track (track ~ x[-140,140], z[-85,85]) within smaller map.
-  // Shorter/smaller buildings placed on an inner ring, larger/taller on an outer ring for depth/skyline.
-  // Latest added city models (Chicago, game-ready) kept smaller; back/outer ring brought closer.
+  // Arrange buildings close around the track (track ~ x[-140,140], z[-85,85]) as a surrounding barrier.
+  // Use only 1 San Francisco city; keep close buildings smaller and overlap colliders to block leaving the track area.
   const placements = useMemo<BuildingPlacement[]>(
     () => [
-      // Inner ring (shorter/smaller, closer)
-      { key: "asian-ne", url: "asian", pos: [160, -110], rot: Math.PI * 0.15, target: 85, collider: [55, 20, 55] },
-      { key: "sf-se", url: "sf", pos: [165, 110], rot: -Math.PI * 0.35, target: 80, collider: [50, 20, 50] },
-      { key: "chicago-sw", url: "chicago", pos: [-160, 110], rot: Math.PI * 0.7, target: 70, collider: [55, 22, 55] },
-      { key: "game-nw", url: "gameReady", pos: [-165, -110], rot: -Math.PI * 0.1, target: 75, collider: [55, 20, 55] },
-      // Outer ring (bigger/taller feel but brought closer; latest models smaller)
-      { key: "chicago-n", url: "chicago", pos: [0, -132], rot: Math.PI / 2, target: 95, collider: [70, 28, 70] },
-      { key: "sf-e", url: "sf", pos: [188, 0], rot: Math.PI, target: 120, collider: [75, 28, 75] },
-      { key: "asian-s", url: "asian", pos: [0, 132], rot: -Math.PI / 2, target: 125, collider: [75, 26, 75] },
-      { key: "game-w", url: "gameReady", pos: [-188, 0], rot: 0, target: 100, collider: [70, 26, 70] },
+      // North side (top)
+      { key: "chicago-nw", url: "chicago", pos: [-95, -125], rot: Math.PI * 0.55, target: 60, collider: [55, 22, 55] },
+      { key: "asian-n", url: "asian", pos: [0, -128], rot: Math.PI / 2, target: 65, collider: [60, 20, 55] },
+      { key: "game-ne", url: "gameReady", pos: [95, -125], rot: Math.PI * 0.4, target: 55, collider: [55, 20, 55] },
+      // East side
+      { key: "sf-e", url: "sf", pos: [160, -55], rot: Math.PI, target: 85, collider: [60, 24, 55] },
+      { key: "chicago-e", url: "chicago", pos: [160, 55], rot: Math.PI * 0.95, target: 60, collider: [55, 22, 55] },
+      // South side
+      { key: "asian-se", url: "asian", pos: [95, 125], rot: -Math.PI * 0.45, target: 65, collider: [55, 20, 55] },
+      { key: "game-s", url: "gameReady", pos: [0, 128], rot: -Math.PI / 2, target: 58, collider: [60, 20, 55] },
+      { key: "chicago-sw", url: "chicago", pos: [-95, 125], rot: -Math.PI * 0.6, target: 60, collider: [55, 22, 55] },
+      // West side
+      { key: "asian-w", url: "asian", pos: [-160, 55], rot: 0.05, target: 65, collider: [55, 20, 55] },
+      { key: "game-w", url: "gameReady", pos: [-160, -55], rot: -0.05, target: 58, collider: [55, 20, 55] },
     ],
     []
   );

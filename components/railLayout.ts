@@ -2,10 +2,15 @@
  * Layout of the crash barrier along both edges of the road. Pure maths (no React / three.js), so it can be unit-run
  * in node.
  *
- * The barrier is cut into modules that follow the centre line: each module runs from arc length s to s + L on the
- * line RAIL_OFFSET to the side of the centre line, so neighbouring modules always touch (the module is stretched a
- * little on the outside of a bend and squeezed on the inside). The only opening is INFIELD_GAP on the inside of
- * the main straight.
+ * The barrier is cut into modules that follow the barrier line (RAIL_OFFSET to the side of the centre line). Each
+ * module is cut by length along ITS OWN side, so every module keeps close to its natural size. The only opening is
+ * INFIELD_GAP on the inside of the main straight.
+ *
+ * Two outputs:
+ *  - `layoutRails`: one straight chord per module (used for the physics colliders).
+ *  - `buildBentRails`: the visible barrier. Every module is BENT along the barrier line (each vertex follows the
+ *    curve) instead of being a rigid straight piece, so neighbouring modules (and their overlapping beam ends) lie on
+ *    the same smooth curve and there are no kinks, gaps or sticking-out corners in the bends.
  */
 
 import { INFIELD_GAP, RAIL_OFFSET, TrackField, inInfieldGap } from "@/components/trackCollision";
@@ -24,7 +29,10 @@ export type RailSeg = {
 export const RAIL_MODULE_LENGTH = 5.4;
 export const RAIL_SCALE = 1.2;
 
-export function layoutRails(field: TrackField, offset = RAIL_OFFSET): RailSeg[] {
+/** Resolution of the sampled barrier lines, in world units. */
+const STEP = 0.4;
+
+function centerline(field: TrackField) {
   const n = field.n;
   const S = new Float64Array(n + 1);
   for (let i = 0; i < n; i++) {
@@ -59,50 +67,133 @@ export function layoutRails(field: TrackField, offset = RAIL_OFFSET): RailSeg[] 
     const p = pos(s);
     return { x: p.x + -tz * q, z: p.z + tx * q };
   };
+  return { total, pos, side };
+}
 
-  // Cut each side by length along ITS OWN line (the outer side of a bend is longer than the centre line, the inner
-  // side shorter), so every module keeps close to its natural size instead of being stretched on tight bends.
+type Centerline = ReturnType<typeof centerline>;
+
+/** One barrier line (closed loop) sampled every STEP units, with the arc length along it. */
+type Side = { px: Float64Array; pz: Float64Array; cum: Float64Array; m: number; len: number; total: number };
+
+function buildSide(cl: Centerline, sgn: number, offset: number): Side {
+  const m = Math.ceil(cl.total / STEP);
+  const px = new Float64Array(m + 1);
+  const pz = new Float64Array(m + 1);
+  const cum = new Float64Array(m + 1);
+  for (let i = 0; i <= m; i++) {
+    const p = cl.side((i / m) * cl.total, offset * sgn);
+    px[i] = p.x;
+    pz[i] = p.z;
+    if (i > 0) cum[i] = cum[i - 1] + Math.hypot(px[i] - px[i - 1], pz[i] - pz[i - 1]);
+  }
+  return { px, pz, cum, m, len: cum[m], total: cl.total };
+}
+
+/** Point at arc length c (0..len) along the barrier line, plus the matching centre-line arc length. */
+function sideAt(sd: Side, c: number) {
+  const { px, pz, cum, m, total } = sd;
+  let lo = 0;
+  let hi = m;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (cum[mid] <= c) lo = mid;
+    else hi = mid;
+  }
+  const seg = cum[lo + 1] - cum[lo];
+  const t = seg > 0 ? (c - cum[lo]) / seg : 0;
+  return { x: px[lo] + (px[lo + 1] - px[lo]) * t, z: pz[lo] + (pz[lo + 1] - pz[lo]) * t, s: ((lo + t) / m) * total };
+}
+
+function moduleCount(sd: Side) {
+  return Math.max(8, Math.round(sd.len / (RAIL_MODULE_LENGTH * RAIL_SCALE)));
+}
+
+export function layoutRails(field: TrackField, offset = RAIL_OFFSET): RailSeg[] {
+  const cl = centerline(field);
   const out: RailSeg[] = [];
-  const STEP = 0.4;
   for (const sgn of [1, -1]) {
-    const m = Math.ceil(total / STEP);
-    const px = new Float64Array(m + 1);
-    const pz = new Float64Array(m + 1);
-    const cum = new Float64Array(m + 1);
-    for (let i = 0; i <= m; i++) {
-      const p = side((i / m) * total, offset * sgn);
-      px[i] = p.x;
-      pz[i] = p.z;
-      if (i > 0) cum[i] = cum[i - 1] + Math.hypot(px[i] - px[i - 1], pz[i] - pz[i - 1]);
-    }
-    const sideLen = cum[m];
-    const count = Math.max(8, Math.round(sideLen / (RAIL_MODULE_LENGTH * RAIL_SCALE)));
-    const L = sideLen / count;
-    const at = (c: number) => {
-      let lo = 0;
-      let hi = m;
-      while (hi - lo > 1) {
-        const mid = (lo + hi) >> 1;
-        if (cum[mid] <= c) lo = mid;
-        else hi = mid;
-      }
-      const seg = cum[lo + 1] - cum[lo];
-      const t = seg > 0 ? (c - cum[lo]) / seg : 0;
-      return { x: px[lo] + (px[lo + 1] - px[lo]) * t, z: pz[lo] + (pz[lo + 1] - pz[lo]) * t, s: ((lo + t) / m) * total };
-    };
+    const sd = buildSide(cl, sgn, offset);
+    const count = moduleCount(sd);
+    const L = sd.len / count;
     for (let k = 0; k < count; k++) {
-      const A = at(k * L);
-      const B = at(Math.min((k + 1) * L, sideLen - 1e-6));
+      const A = sideAt(sd, k * L);
+      const B = sideAt(sd, Math.min((k + 1) * L, sd.len - 1e-6));
       const x = (A.x + B.x) / 2;
       const z = (A.z + B.z) / 2;
       // the opening on the inside of the main straight: no barrier there
-      const cl = pos((A.s + B.s) / 2);
-      if (inInfieldGap(cl.x, cl.z) && field.inside(x, z)) continue;
+      const c = cl.pos((A.s + B.s) / 2);
+      if (inInfieldGap(c.x, c.z) && field.inside(x, z)) continue;
       out.push({ x, z, yaw: Math.atan2(-(B.z - A.z), B.x - A.x), len: Math.hypot(B.x - A.x, B.z - A.z) });
     }
   }
   return out;
 }
+
+export type RailMeshData = { positions: number[]; normals: number[]; indices: number[] };
+
+/**
+ * The visible barrier as one merged mesh with every module bent along the barrier line.
+ * `rail` is one straight module (local +x along the barrier, +y up, +z to the left), `ground(x, z)` the terrain height.
+ */
+export function buildBentRails(
+  field: TrackField,
+  rail: RailMeshData,
+  ground: (x: number, z: number) => number,
+  offset = RAIL_OFFSET
+) {
+  const cl = centerline(field);
+  const nv = rail.positions.length / 3;
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const indices: number[] = [];
+  const TAN = 0.6; // half window for the tangent: smooth direction, not the direction of one tiny sample step
+
+  for (const sgn of [1, -1]) {
+    const sd = buildSide(cl, sgn, offset);
+    const count = moduleCount(sd);
+    const L = sd.len / count;
+    const kx = L / RAIL_MODULE_LENGTH; // the module is stretched / squeezed a little to fit its slot
+    const wrap = (c: number) => ((c % sd.len) + sd.len) % sd.len;
+
+    for (let k = 0; k < count; k++) {
+      const A = sideAt(sd, k * L);
+      const B = sideAt(sd, Math.min((k + 1) * L, sd.len - 1e-6));
+      const mx = (A.x + B.x) / 2;
+      const mz = (A.z + B.z) / 2;
+      const c0 = cl.pos((A.s + B.s) / 2);
+      if (inInfieldGap(c0.x, c0.z) && field.inside(mx, mz)) continue;
+
+      const cc = (k + 0.5) * L;
+      const base = positions.length / 3;
+      for (let v = 0; v < nv; v++) {
+        const lx = rail.positions[v * 3];
+        const ly = rail.positions[v * 3 + 1];
+        const lz = rail.positions[v * 3 + 2];
+        const c = wrap(cc + lx * kx);
+        const p = sideAt(sd, c);
+        const q = sideAt(sd, wrap(c + TAN));
+        const r = sideAt(sd, wrap(c - TAN));
+        let tx = q.x - r.x;
+        let tz = q.z - r.z;
+        const tl = Math.hypot(tx, tz) || 1;
+        tx /= tl;
+        tz /= tl;
+        // left normal, same as local +z of the straight module
+        const nx = -tz;
+        const nz = tx;
+        positions.push(p.x + nx * lz * RAIL_SCALE, ground(p.x, p.z) + ly * RAIL_SCALE, p.z + nz * lz * RAIL_SCALE);
+
+        const ax = rail.normals[v * 3];
+        const ay = rail.normals[v * 3 + 1];
+        const az = rail.normals[v * 3 + 2];
+        normals.push(tx * ax + nx * az, ay, tz * ax + nz * az);
+      }
+      for (let i = 0; i < rail.indices.length; i++) indices.push(rail.indices[i] + base);
+    }
+  }
+  return { positions, normals, indices };
+}
+
 /** Where the pushable cones stand: one row across the mouth of the opening. */
 export function coneLayout(): { x: number; z: number; yaw: number }[] {
   const out: { x: number; z: number; yaw: number }[] = [];

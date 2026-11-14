@@ -113,11 +113,11 @@ export default function GmailInteractive({
       {/* Plain mailbox model, grounded/centered above the terrain */}
       <primitive object={model} />
 
-      {/* Same warm light as the printer (a bit weaker: the model is smaller, so the light sits closer) */}
+      {/* Soft warm light, toned down (was 180 at night) so the mailbox isn't blown out */}
       <pointLight
         position={[Math.sin(GMAIL_POS.yaw) * 3, 4.5, Math.cos(GMAIL_POS.yaw) * 3]}
         color="#ffe6c0"
-        intensity={night ? 180 : 45}
+        intensity={night ? 60 : 15}
         distance={22}
         decay={2}
       />

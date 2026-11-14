@@ -8,32 +8,35 @@
  * INFIELD_GAP). The Rapier colliders here only keep the pushable logos, tyres and cones from rolling through it.
  */
 
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import RAPIER from "@dimforge/rapier3d-compat";
 import { groundHeight } from "@/components/Terrain";
 import { usePhysics, isWorldFreed } from "@/components/PhysicsProvider";
 import type { TrackField } from "@/components/trackCollision";
-import { RAIL_MODULE_LENGTH, RAIL_SCALE, coneLayout, layoutRails } from "@/components/railLayout";
+import { RAIL_SCALE, buildBentRails, coneLayout, layoutRails } from "@/components/railLayout";
 import railData from "@/components/trackAssets/rail.json";
 import coneData from "@/components/trackAssets/cone.json";
 
 /* ---------- barrier ---------- */
 
 export function TrackRails({ field }: { field: TrackField }) {
-  const meshRef = useRef<THREE.InstancedMesh>(null);
   const { world } = usePhysics();
+  // straight chords: only for the physics colliders below
   const segs = useMemo(() => layoutRails(field), [field]);
 
+  // The visible barrier: every module is bent along the barrier line, so bends are one smooth curve instead of
+  // rigid straight pieces glued together at an angle.
   const geometry = useMemo(() => {
+    const bent = buildBentRails(field, railData, groundHeight);
     const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute(railData.positions, 3));
-    g.setAttribute("normal", new THREE.Float32BufferAttribute(railData.normals, 3));
-    g.setIndex(railData.indices);
+    g.setAttribute("position", new THREE.Float32BufferAttribute(bent.positions, 3));
+    g.setAttribute("normal", new THREE.Float32BufferAttribute(bent.normals, 3));
+    g.setIndex(new THREE.Uint32BufferAttribute(bent.indices, 1));
     g.computeBoundingSphere();
     return g;
-  }, []);
+  }, [field]);
 
   const material = useMemo(
     () =>
@@ -45,25 +48,6 @@ export function TrackRails({ field }: { field: TrackField }) {
       }),
     []
   );
-
-  useLayoutEffect(() => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
-    const m = new THREE.Matrix4();
-    const q = new THREE.Quaternion();
-    const p = new THREE.Vector3();
-    const s = new THREE.Vector3();
-    const up = new THREE.Vector3(0, 1, 0);
-    segs.forEach((g, i) => {
-      q.setFromAxisAngle(up, g.yaw);
-      p.set(g.x, groundHeight(g.x, g.z), g.z);
-      s.set(g.len / RAIL_MODULE_LENGTH, RAIL_SCALE, RAIL_SCALE);
-      m.compose(p, q, s);
-      mesh.setMatrixAt(i, m);
-    });
-    mesh.count = segs.length;
-    mesh.instanceMatrix.needsUpdate = true;
-  }, [segs]);
 
   // fixed colliders so the pushable props can't be shoved through the barrier
   useEffect(() => {
@@ -87,15 +71,7 @@ export function TrackRails({ field }: { field: TrackField }) {
     };
   }, [world, segs]);
 
-  return (
-    <instancedMesh
-      ref={meshRef}
-      args={[geometry, material, Math.max(1, segs.length)]}
-      frustumCulled={false}
-      castShadow={false}
-      receiveShadow={false}
-    />
-  );
+  return <mesh geometry={geometry} material={material} frustumCulled={false} castShadow={false} receiveShadow={false} />;
 }
 
 /* ---------- pushable traffic cones ---------- */

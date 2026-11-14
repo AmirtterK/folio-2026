@@ -109,6 +109,47 @@ function LoadingScreen({ progress, visible }: { progress: number; visible: boole
   );
 }
 
+/* ---------- Settle gate: keep the loading screen up until the scene is really running ---------- */
+
+// The car is in the scene long before everything else is: the city models are still parsing, the physics colliders
+// are still being built and the shaders are still compiling, and all of that freezes the main thread for a few seconds.
+// If the loading screen fades out as soon as the car is there, that freeze happens in front of the player as a black
+// screen. So the overlay stays until nothing is loading any more and the scene has rendered a run of smooth frames.
+const SETTLE_FRAMES = 45; // consecutive smooth frames needed
+const SETTLE_MAX_FRAME_S = 0.1; // a frame slower than this (10 fps) is a stall and restarts the count
+const SETTLE_TIMEOUT_MS = 20_000; // never hold the loading screen longer than this after the car is in
+
+function SceneSettleGate({
+  armed,
+  onSettled,
+  onProgress,
+}: {
+  armed: boolean;
+  onSettled: () => void;
+  onProgress: (frac: number) => void;
+}) {
+  const loading = useProgress((s) => s.active);
+  const st = useRef({ good: 0, armedAt: 0, done: false, lastFrac: -1 });
+  useFrame((_, delta) => {
+    const s = st.current;
+    if (s.done || !armed) return;
+    const now = performance.now();
+    if (!s.armedAt) s.armedAt = now;
+    if (loading || delta > SETTLE_MAX_FRAME_S) s.good = 0;
+    else s.good++;
+    const frac = Math.min(1, s.good / SETTLE_FRAMES);
+    if (frac !== s.lastFrac) {
+      s.lastFrac = frac;
+      onProgress(frac);
+    }
+    if (s.good >= SETTLE_FRAMES || now - s.armedAt > SETTLE_TIMEOUT_MS) {
+      s.done = true;
+      onSettled();
+    }
+  });
+  return null;
+}
+
 /* ---------- Fixed camera (locked position/orbit, rotate only) ---------- */
 
 function FreeCamControls({
@@ -706,6 +747,9 @@ export default function FolioScene() {
   };
   const [sceneReady, setSceneReady] = useState(false);
   const [carReady, setCarReady] = useState(false);
+  const [settled, setSettled] = useState(false);
+  const [settleFrac, setSettleFrac] = useState(0);
+  const handleSettled = useCallback(() => setSettled(true), []);
   const [carLoaded, setCarLoaded] = useState(false);
   const [loadProgress, setLoadProgress] = useState(0);
   const [canvasDeferred, setCanvasDeferred] = useState(false);
@@ -725,24 +769,31 @@ export default function FolioScene() {
 
   // Real progress: every file the scene asks for (models, textures) goes through three's loading manager, so
   // loaded / total is the true share that has arrived. The total grows as the scene discovers more files, so the
-  // bar never moves backwards; files are worth 0-95% and the last 5% is the car appearing in the scene.
+  // bar never moves backwards. Real stages only, nothing faked: files 0-85%, the car in the scene 85-90%, and the
+  // last 10% is the share of smooth frames the scene has rendered so far (see SceneSettleGate).
   const { loaded: filesLoaded, total: filesTotal } = useProgress();
   useEffect(() => {
-    if (sceneReady) { setLoadProgress(100); return; }
-    const files = filesTotal > 0 ? (filesLoaded / filesTotal) * 95 : 0;
-    setLoadProgress((prev) => Math.max(prev, carReady ? 100 : Math.min(95, files)));
-  }, [filesLoaded, filesTotal, carReady, sceneReady]);
+    if (sceneReady || settled) { setLoadProgress(100); return; }
+    const files = filesTotal > 0 ? filesLoaded / filesTotal : 0;
+    const real = files * 85 + (carReady ? 5 : 0) + settleFrac * 10;
+    setLoadProgress((prev) => Math.max(prev, Math.min(99, real)));
+  }, [filesLoaded, filesTotal, carReady, sceneReady, settled, settleFrac]);
 
   // Called by FolioCar only after the GLB body has mounted in the scene.
   const handleSceneReady = useCallback(() => {
     setCarLoaded(true);
     setCarReady(true);
-    setLoadProgress(100);
     if (readySignaled.current) return;
     readySignaled.current = true;
-    // Let the ring visibly reach 100% before fading the overlay out.
-    setTimeout(() => setSceneReady(true), 350);
   }, []);
+
+  // The overlay only fades out once the car is in AND the scene has settled (nothing loading, smooth frames).
+  useEffect(() => {
+    if (!carReady || !settled || sceneReady) return;
+    // Let the ring visibly reach 100% before fading the overlay out.
+    const id = setTimeout(() => setSceneReady(true), 350);
+    return () => clearTimeout(id);
+  }, [carReady, settled, sceneReady]);
 
   // Solid hologram projectors (knight, neural network): the car can't drive through them.
   // The other landmarks (printer, mailbox, LinkedIn, diploma, robot arm) register their own colliders.
@@ -910,6 +961,7 @@ export default function FolioScene() {
               : { position: [6, 3.5, 7], fov: 40 }
           }
         >
+          <SceneSettleGate armed={carReady} onSettled={handleSettled} onProgress={setSettleFrac} />
           {view === "track" ? (
             <PhysicsProvider pose={pose}>
               <>

@@ -15,6 +15,36 @@ function isMobileDevice() {
   return uaMobile || (coarse && smallViewport && navigator.maxTouchPoints > 0);
 }
 
+// Start fetching the 3D bundle right away instead of after hydration (desktop only; phones never load it).
+if (typeof window !== "undefined" && !isMobileDevice()) {
+  void import("@/components/FolioScene");
+}
+
+// Shown from the very first frame, before the 3D bundle has arrived: the same ring as FolioScene's loader, at 0%
+// (nothing has loaded yet), so the hand-over to the real progress ring is seamless. No spinner.
+function BootLoader() {
+  const r = 54;
+  const circ = 2 * Math.PI * r;
+  return (
+    <div style={{ position: "relative", width: 140, height: 140, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <svg width={140} height={140} style={{ transform: "rotate(-90deg)", position: "absolute", inset: 0 }}>
+        <circle cx={70} cy={70} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={5} />
+        <circle
+          cx={70}
+          cy={70}
+          r={r}
+          fill="none"
+          stroke="#ffffff"
+          strokeWidth={5}
+          strokeLinecap="round"
+          strokeDasharray={`0 ${circ}`}
+        />
+      </svg>
+      <span style={{ color: "#ffffff", fontSize: 22, fontWeight: 700, letterSpacing: 0.5 }}>0%</span>
+    </div>
+  );
+}
+
 export default function Page() {
   const [status, setStatus] = useState<"checking" | "phone" | "desktop">("checking");
 
@@ -46,7 +76,9 @@ export default function Page() {
               experience.
             </div>
           </div>
-        ) : null}
+        ) : (
+          <BootLoader />
+        )}
       </div>
     );
   }
@@ -65,8 +97,13 @@ export default function Page() {
           inset: 0,
           background: "#000000",
           pointerEvents: "none",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
-      />
+      >
+        <BootLoader />
+      </div>
       <FolioScene />
     </>
   );

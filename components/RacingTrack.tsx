@@ -119,7 +119,7 @@ function createTrackTexture(): THREE.CanvasTexture {
 
 /* ---------- Procedural Monza Geometry Generator ---------- */
 
-export function buildMonzaGeometry(width = 11.73, period = 3.2, yOffset = 0) {
+export function buildMonzaGeometry(width = 14, period = 3.2, yOffset = 0) {
   const points = [
     new THREE.Vector3(30.15, 0.02, 57.15),
     new THREE.Vector3(25.12, 0.02, 57.15),
@@ -680,7 +680,7 @@ export function RacingTrack({ showCurbs = true, night = false, withTerrain = tru
         material={startLineMaterial}
         receiveShadow
       >
-        <planeGeometry args={[11.73, 2.0]} />
+        <planeGeometry args={[14, 2.0]} />
       </mesh>
 
       {/* Starting Grid Line markings along the straight heading West */}
@@ -688,7 +688,7 @@ export function RacingTrack({ showCurbs = true, night = false, withTerrain = tru
         <mesh
           key={x}
           rotation={[-Math.PI / 2, 0, Math.PI / 2]}
-          position={[x, 0.023, 57.15 + (idx % 2 === 0 ? 3.036 : -3.036)]}
+          position={[x, 0.023, 57.15 + (idx % 2 === 0 ? 3.62 : -3.62)]}
         >
           <planeGeometry args={[3.45, 0.25]} />
           <meshBasicMaterial color="#ffffff" opacity={0.7} transparent />

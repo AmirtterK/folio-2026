@@ -990,8 +990,8 @@ export default function FolioScene() {
                 const totalRows = Math.ceil(arr.length / perRow);
                 const itemsInRow = row === totalRows - 1 ? arr.length - row * perRow : perRow;
                 const colOffset = col - (itemsInRow - 1) / 2; // centers last row when it has 2
-                const x = 20 - row * 8.0;
-                const z = 57 + colOffset * 3.7;
+                const x = 8 - row * 8.0;
+                const z = 57 + colOffset * 4.6;
                 const logoRotation: [number, number, number] = [0.017453, 0.872665, 0]; // X:1°, Y:50°, Z:0°
                 return (
                   <MovableLogo key={i} position={[x, 0, z]}>

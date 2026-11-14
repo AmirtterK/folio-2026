@@ -80,6 +80,8 @@ export default function PrinterInteractive({
     holoAnchor[2] + KEY_PROMPT_OFFSET_FROM_HOLOGRAM[2],
   ];
   const textY = promptPos[1] - (0.9 + PRINTER_LINES.length * 0.16);
+  const mobileVertical = !!touch && typeof window !== "undefined" && window.innerHeight > window.innerWidth;
+  const textPos: [number, number, number] = mobileVertical ? [0, promptPos[1], 0] : [promptPos[0], textY, promptPos[2]];
 
   return (
     <group position={[PRINTER_POS.x, y, PRINTER_POS.z]}>
@@ -102,7 +104,7 @@ export default function PrinterInteractive({
       <primitive object={model} />
 
       {/* Inspect UI: prompt + text/link (interaction logic), text revealed at key position */}
-      <group position={[promptPos[0], textY, promptPos[2]]}>
+      <group position={textPos}>
         <HoloText lines={PRINTER_LINES} active={inspecting} night={night} mobile={touch} />
       </group>
       <HoloKeyPrompt

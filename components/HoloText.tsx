@@ -42,23 +42,27 @@ function setSpacing(ctx: CanvasRenderingContext2D, px: number) {
 
 /** Draw one line of glowing holographic type onto a transparent canvas and fit it to a world width. */
 function createHoloTextTexture(spec: HoloLineSpec) {
-  const font = `${spec.italic ? "italic " : ""}${spec.weight} ${spec.size}px ${spec.family}`;
+  // Render at higher internal resolution for sharper text, keep world plane size the same.
+  const res = 2;
+  const size = spec.size * res;
+  const spacing = (spec.spacing ?? 0) * res;
+  const font = `${spec.italic ? "italic " : ""}${spec.weight} ${size}px ${spec.family}`;
   const probe = document.createElement("canvas").getContext("2d")!;
   probe.font = font;
-  setSpacing(probe, spec.spacing ?? 0);
+  setSpacing(probe, spacing);
   const textW = Math.max(1, probe.measureText(spec.text).width);
 
-  const padX = Math.ceil(spec.size * 0.85);
-  const padY = Math.ceil(spec.size * 0.85);
+  const padX = Math.ceil(size * 0.85);
+  const padY = Math.ceil(size * 0.85);
   const w = Math.ceil(textW + padX * 2);
-  const h = Math.ceil(spec.size * 1.35 + padY * 2);
+  const h = Math.ceil(size * 1.35 + padY * 2);
 
   const canvas = document.createElement("canvas");
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext("2d")!;
   ctx.font = font;
-  setSpacing(ctx, spec.spacing ?? 0);
+  setSpacing(ctx, spacing);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   const cx = w / 2;
@@ -66,7 +70,7 @@ function createHoloTextTexture(spec: HoloLineSpec) {
 
   ctx.fillStyle = spec.color;
   ctx.shadowColor = `rgba(${HOLO_RGB},0.95)`;
-  ctx.shadowBlur = spec.size * 0.55;
+  ctx.shadowBlur = size * 0.55;
   ctx.fillText(spec.text, cx, cy);
   ctx.fillText(spec.text, cx, cy);
 
@@ -76,10 +80,10 @@ function createHoloTextTexture(spec: HoloLineSpec) {
 
   if (spec.underline) {
     ctx.strokeStyle = spec.color;
-    ctx.lineWidth = Math.max(2, spec.size * 0.025);
+    ctx.lineWidth = Math.max(2, size * 0.025);
     ctx.shadowColor = `rgba(${HOLO_RGB},0.9)`;
-    ctx.shadowBlur = spec.size * 0.25;
-    const y = cy + spec.size * 0.62;
+    ctx.shadowBlur = size * 0.25;
+    const y = cy + size * 0.62;
     ctx.beginPath();
     ctx.moveTo(cx - textW / 2, y);
     ctx.lineTo(cx + textW / 2, y);
@@ -91,6 +95,8 @@ function createHoloTextTexture(spec: HoloLineSpec) {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 16;
   tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = true;
 
   const planeW = (spec.textWidth * w) / textW;
   return { tex, planeW, planeH: (planeW * h) / w };

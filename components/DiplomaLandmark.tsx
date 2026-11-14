@@ -49,7 +49,10 @@ export default function DiplomaLandmark({
 
   const { w, h } = useMemo(() => {
     tex.colorSpace = THREE.SRGBColorSpace; // older three: tex.encoding = THREE.sRGBEncoding
-    tex.anisotropy = 8;
+    tex.anisotropy = 16;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = true;
     tex.needsUpdate = true;
     const img = tex.image as HTMLImageElement;
     return { w: HEIGHT * (img.width / img.height), h: HEIGHT };
@@ -88,6 +91,8 @@ export default function DiplomaLandmark({
     holoAnchor[2] + KEY_PROMPT_OFFSET_FROM_HOLOGRAM[2],
   ];
   const textY = promptPos[1] - (0.9 + DIPLOMA_LINES.length * 0.16);
+  const mobileVertical = !!touch && typeof window !== "undefined" && window.innerHeight > window.innerWidth;
+  const textPos: [number, number, number] = mobileVertical ? [0, promptPos[1], 0] : [promptPos[0], textY, promptPos[2]];
 
   return (
     <group ref={groupRef} position={[DIPLOMA_POS.x, baseY, DIPLOMA_POS.z]}>
@@ -117,7 +122,7 @@ export default function DiplomaLandmark({
       </group>
 
       {/* Text/prompt in world-aligned space (bobs with diploma) so it stays next to it, not behind */}
-      <group position={[promptPos[0], textY, promptPos[2]]}>
+      <group position={textPos}>
         <HoloText lines={DIPLOMA_LINES} active={inspecting} night={night} mobile={touch} />
       </group>
       <HoloKeyPrompt

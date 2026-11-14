@@ -84,6 +84,8 @@ export default function LinkedInInteractive({
     holoAnchor[2] + KEY_PROMPT_OFFSET_FROM_HOLOGRAM[2],
   ];
   const textY = promptPos[1] - (0.9 + LINKEDIN_LINES.length * 0.16);
+  const mobileVertical = !!touch && typeof window !== "undefined" && window.innerHeight > window.innerWidth;
+  const textPos: [number, number, number] = mobileVertical ? [0, promptPos[1], 0] : [promptPos[0], textY, promptPos[2]];
 
   return (
     <group position={[LINKEDIN_POS.x, y, LINKEDIN_POS.z]}>
@@ -104,7 +106,7 @@ export default function LinkedInInteractive({
       {/* Plain LinkedIn logo, standing upright/centered on the ground */}
       <primitive object={model} />
 
-      <group position={[promptPos[0], textY, promptPos[2]]}>
+      <group position={textPos}>
         <HoloText lines={LINKEDIN_LINES} active={inspecting} night={night} mobile={touch} />
       </group>
       <HoloKeyPrompt

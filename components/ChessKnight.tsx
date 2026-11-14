@@ -153,6 +153,8 @@ export default function ChessKnight({
     holoAnchor[2] + KEY_PROMPT_OFFSET_FROM_HOLOGRAM[2],
   ];
   const textY = promptPos[1] - (0.9 + KNIGHT_LINES.length * 0.16);
+  const mobileVertical = !!touch && typeof window !== "undefined" && window.innerHeight > window.innerWidth;
+  const textPos: [number, number, number] = mobileVertical ? [0, promptPos[1], 0] : [promptPos[0], textY, promptPos[2]];
 
   return (
     <group position={[KNIGHT_POS.x, y, KNIGHT_POS.z]} rotation={[0, (Math.PI * 50) / 180, 0]}>
@@ -185,7 +187,7 @@ export default function ChessKnight({
         </group>
 
         {/* Holographic writing revealed at the key prompt position while inspecting */}
-        <group position={[promptPos[0], textY, promptPos[2]]}>
+        <group position={textPos}>
           <HoloText lines={KNIGHT_LINES} active={inspecting} night={night} mobile={touch} />
         </group>
 

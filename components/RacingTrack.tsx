@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { MutableRefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
+import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import type { CarPose } from "@/components/FolioCar";
+import { groundHeight } from "@/components/Terrain";
 
 /* ---------- Monza Circuit Accurate Layout & Coordinates ---------- */
 
@@ -423,7 +425,7 @@ function createGlowTexture(): THREE.CanvasTexture {
 
 type Lamp = { x: number; z: number; rot: number };
 
-const LAMP_HEAD = { out: 1.8, y: 5.25 }; // where the light head sits, in the lamp's local space
+const LAMP_HEAD = { out: 2.2, y: 5.4 }; // approx light head position in lamp local space for GLB street light model
 const LAMP_LIGHTS = 4; // real spotlights in the pool (constant count, so no shader recompiles)
 const LAMP_FADE_NEAR = 16; // full strength inside this distance from the car
 const LAMP_FADE_FAR = 48; // completely off beyond this distance
@@ -534,35 +536,71 @@ function TrackLamps({
   geometry: THREE.BufferGeometry;
   pose?: MutableRefObject<CarPose>;
 }) {
+  const { scene } = useGLTF("/models/examples/simple_collection_of_low_poly_street_lights.glb");
   const glow = useMemo(() => createGlowTexture(), []);
-  const mats = useMemo(
-    () => ({
-      pole: new THREE.MeshStandardMaterial({ color: "#2a2d3a", roughness: 0.6, metalness: 0.4 }),
-      head: new THREE.MeshBasicMaterial({ color: "#fff1c9", toneMapped: false }),
-      pool: new THREE.MeshBasicMaterial({
+
+  const lampModel = useMemo(() => {
+    const src =
+      scene.getObjectByName("classic_street_light_4") ||
+      scene.getObjectByName("classic_street_light_2") ||
+      scene.getObjectByName("classic_street_light") ||
+      scene;
+    const root = src.clone(true);
+    root.traverse((o) => {
+      const m = o;
+      if (m.isMesh) {
+        m.castShadow = true;
+        m.receiveShadow = true;
+      }
+    });
+
+    // Normalize model size/placement so the base sits on ground and arm points +X (toward track after rot)
+    const box = new THREE.Box3().setFromObject(root);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const height = Math.max(size.y, 0.001);
+    const targetHeight = 5.8;
+    const s = targetHeight / height;
+    root.scale.setScalar(s);
+    root.updateMatrixWorld(true);
+
+    const box2 = new THREE.Box3().setFromObject(root);
+    const center = new THREE.Vector3();
+    box2.getCenter(center);
+    root.position.x -= center.x;
+    root.position.z -= center.z;
+    root.position.y -= box2.min.y;
+    // Rotate so the lamp arm/head extends roughly along +X in local space (matches lamp placement logic)
+    root.rotation.y += Math.PI / 2;
+
+    return root;
+  }, [scene]);
+
+  const poolMat = useMemo(
+    () =>
+      new THREE.MeshBasicMaterial({
         map: glow,
         color: "#ffc66b",
         transparent: true,
-        opacity: 0.22, // just a soft halo now — the real light comes from LampLights
+        opacity: 0.22,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         toneMapped: false,
       }),
-    }),
     [glow]
   );
 
   const lamps = useMemo(() => {
-    const pos = geometry.attributes.position as THREE.BufferAttribute;
+    const pos = geometry.attributes.position;
     const rows = pos.count / 2;
-    const center = (i: number) => {
+    const center = (i) => {
       const k = ((i % (rows - 1)) + (rows - 1)) % (rows - 1);
       return new THREE.Vector2(
         (pos.getX(k * 2) + pos.getX(k * 2 + 1)) / 2,
         (pos.getZ(k * 2) + pos.getZ(k * 2 + 1)) / 2
       );
     };
-    const out: { x: number; z: number; rot: number }[] = [];
+    const out = [];
     let flip = 1;
     for (let i = 0; i < rows - 1; i += 24) {
       const c = center(i);
@@ -584,17 +622,9 @@ function TrackLamps({
     <group>
       <LampLights lamps={lamps} pose={pose} />
       {lamps.map((l, i) => (
-        <group key={i} position={[l.x, 0, l.z]} rotation={[0, l.rot, 0]}>
-          <mesh position={[0, 2.7, 0]} material={mats.pole} castShadow>
-            <cylinderGeometry args={[0.1, 0.15, 5.4, 8]} />
-          </mesh>
-          <mesh position={[0.9, 5.35, 0]} material={mats.pole}>
-            <boxGeometry args={[1.9, 0.1, 0.1]} />
-          </mesh>
-          <mesh position={[1.8, 5.27, 0]} material={mats.head}>
-            <boxGeometry args={[0.9, 0.12, 0.45]} />
-          </mesh>
-          <mesh position={[1.8, 0.07, 0]} rotation={[-Math.PI / 2, 0, 0]} material={mats.pool} renderOrder={3}>
+        <group key={i} position={[l.x, groundHeight(l.x, l.z), l.z]} rotation={[0, l.rot, 0]}>
+          <primitive object={lampModel.clone()} />
+          <mesh position={[LAMP_HEAD.out, 0.07, 0]} rotation={[-Math.PI / 2, 0, 0]} material={poolMat} renderOrder={3}>
             <planeGeometry args={[17, 17]} />
           </mesh>
         </group>
@@ -602,6 +632,111 @@ function TrackLamps({
     </group>
   );
 }
+
+function CityBuildings() {
+  const { scene } = useGLTF("/models/examples/asian_themed_low_poly_night_city_buildings.glb");
+  const model = useMemo(() => {
+    const root = scene.clone(true);
+    root.traverse((o) => {
+      const m = o;
+      if (m.isMesh) {
+        m.castShadow = true;
+        m.receiveShadow = true;
+      }
+    });
+    const box = new THREE.Box3().setFromObject(root);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const maxDim = Math.max(size.x, size.z, 0.001);
+    const target = 240; // spread outside track bounds
+    const s = target / maxDim;
+    root.scale.setScalar(s);
+    root.updateMatrixWorld(true);
+    const box2 = new THREE.Box3().setFromObject(root);
+    const center = new THREE.Vector3();
+    box2.getCenter(center);
+    root.position.x -= center.x;
+    root.position.z -= center.z;
+    root.position.y -= box2.min.y;
+    return root;
+  }, [scene]);
+
+  // Place outside track road range (TRACK_BOUNDS ~ x[-140,140], z[-85,85])
+  const placements = useMemo(
+    () => [
+      { pos: [-210, 0], rot: 0 },
+      { pos: [210, 0], rot: Math.PI },
+      { pos: [0, -170], rot: Math.PI / 2 },
+      { pos: [0, 170], rot: -Math.PI / 2 },
+    ],
+    []
+  );
+
+  return (
+    <group>
+      {placements.map((p, i) => (
+        <group key={i} position={[p.pos[0], groundHeight(p.pos[0], p.pos[1]), p.pos[1]]} rotation={[0, p.rot, 0]}>
+          <primitive object={model.clone()} />
+        </group>
+      ))}
+    </group>
+  );
+}
+
+function MiddleTires() {
+  const { scene } = useGLTF("/models/examples/low_poly_tire_fixed.glb");
+  const tireModel = useMemo(() => {
+    const root = scene.clone(true);
+    root.traverse((o) => {
+      const m = o;
+      if (m.isMesh) {
+        m.castShadow = true;
+        m.receiveShadow = true;
+      }
+    });
+    const box = new THREE.Box3().setFromObject(root);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const maxDim = Math.max(size.x, size.y, size.z, 0.001);
+    const s = 1.6 / maxDim;
+    root.scale.setScalar(s);
+    root.updateMatrixWorld(true);
+    const box2 = new THREE.Box3().setFromObject(root);
+    const center = new THREE.Vector3();
+    box2.getCenter(center);
+    root.position.x -= center.x;
+    root.position.z -= center.z;
+    root.position.y -= box2.min.y;
+    return root;
+  }, [scene]);
+
+  // 4 tires placed in the middle/infield area
+  const tires = useMemo(
+    () => [
+      { x: -18, z: 8, rot: 0.4, s: 1.0 },
+      { x: 12, z: -6, rot: 1.7, s: 0.9 },
+      { x: -4, z: -18, rot: 2.6, s: 1.1 },
+      { x: 22, z: 14, rot: 0.9, s: 0.95 },
+    ],
+    []
+  );
+
+  return (
+    <group>
+      {tires.map((t, i) => (
+        <group
+          key={i}
+          position={[t.x, groundHeight(t.x, t.z), t.z]}
+          rotation={[0, t.rot, 0]}
+          scale={t.s}
+        >
+          <primitive object={tireModel.clone()} />
+        </group>
+      ))}
+    </group>
+  );
+}
+
 
 /* ---------- Racing Track Component (Monza Circuit) ---------- */
 
@@ -663,6 +798,9 @@ export function RacingTrack({ showCurbs = true, night = false, withTerrain = tru
           <planeGeometry args={[800, 800]} />
         </mesh>
       )}
+
+      <CityBuildings />
+      <MiddleTires />
 
       {night && <TrackLamps geometry={monzaGeometry} pose={pose} />}
 
@@ -912,3 +1050,7 @@ export function FolioTopDownCam({
 
   return null;
 }
+
+useGLTF.preload("/models/examples/simple_collection_of_low_poly_street_lights.glb");
+useGLTF.preload("/models/examples/asian_themed_low_poly_night_city_buildings.glb");
+useGLTF.preload("/models/examples/low_poly_tire_fixed.glb");

@@ -560,8 +560,6 @@ export default function FolioScene() {
   const [view, setView] = useState<View>("track");
   const [color, setColor] = useState("#8d9196");
   const [carModel, setCarModel] = useState<CarModel>("ferrari");
-  const [smokeOn, setSmokeOn] = useState(true);
-  const [showCurbs, setShowCurbs] = useState(true);
   const [night, setNight] = useState(true); // boolean view of the day/night cycle (flips at the transition midpoint)
   const dayCycleRef = useRef<DayCycle>({ target: 1, from: 1, mix: 1, startedAt: -1, nextAt: 0 });
   const appRootRef = useRef<HTMLDivElement | null>(null);
@@ -994,7 +992,7 @@ export default function FolioScene() {
                 shadow-bias={-0.0004}
                 shadow-normalBias={0.03}
               />
-              <RacingTrack showCurbs={showCurbs} night={night} withTerrain={true} pose={pose} />
+              <RacingTrack night={night} withTerrain={true} pose={pose} />
               <Terrain />
               <ExampleModels />
               <ChessKnight
@@ -1096,7 +1094,7 @@ export default function FolioScene() {
                 color={color}
                 keyboard={false}
                 input={inspecting || !carLoaded ? emptyInput : input}
-                smoke={smokeOn && carLoaded}
+                smoke={carLoaded}
                 terrain={groundHeight}
                 grip={groundGrip}
                 collide={groundCollide}
@@ -1129,7 +1127,7 @@ export default function FolioScene() {
               <ambientLight intensity={0.8} />
               <hemisphereLight args={["#ffffff", "#555555", 0.5]} />
               <directionalLight position={[4, 7, 5]} intensity={1.2} />
-              <FolioCar key={carModel} color={color} keyboard={false} input={carLoaded ? input : emptyInput} smoke={smokeOn && carLoaded} carScale={1.7534} model={carModel} onReady={handleSceneReady} maxSpeed={24} />
+              <FolioCar key={carModel} color={color} keyboard={false} input={carLoaded ? input : emptyInput} smoke={carLoaded} carScale={1.7534} model={carModel} onReady={handleSceneReady} maxSpeed={24} />
               <OrbitControls ref={orbitControlsRef} target={[0, 1, 0]} minPolarAngle={0.15} maxPolarAngle={Math.PI / 2 - 0.08} />
               <CameraDebugUpdater controlsRef={orbitControlsRef} posRef={camPosRef} dirRef={camDirRef} targetRef={camTargetRef} />
               <CameraPositionApplier controlsRef={orbitControlsRef} position={camEdit} applyTick={camApplyTick} hold={manualCamHold} />
@@ -1205,50 +1203,8 @@ export default function FolioScene() {
 
 
 
-        {(view === "smoke" || view === "track") && (
-          <label
-            style={{
-              display: "flex",
-              gap: 6,
-              alignItems: "center",
-              marginLeft: 8,
-              color: "#2a2622",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={smokeOn}
-              onChange={(e) => setSmokeOn(e.target.checked)}
-            />
-            Smoke
-          </label>
-        )}
-
         {view === "track" && (
           <>
-            <label
-              style={{
-                display: "flex",
-                gap: 6,
-                alignItems: "center",
-                marginLeft: 8,
-                color: "#2a2622",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={showCurbs}
-                onChange={(e) => setShowCurbs(e.target.checked)}
-              />
-              Curbs
-            </label>
-
             <button
               onClick={() => setShowMinimap(true)}
               title="Open map (or press 'M')"

@@ -629,24 +629,6 @@ export default function HandGesturesCamera({ controlsRef, enabled }: HandGesture
           >
             No hand
           </div>
-          <div
-            style={{
-              position: "absolute",
-              bottom: 6,
-              left: 6,
-              right: 6,
-              fontSize: 10,
-              lineHeight: 1.3,
-              color: "#fff",
-              background: "rgba(0,0,0,0.55)",
-              padding: "4px 6px",
-              borderRadius: 6,
-              pointerEvents: "none",
-            }}
-          >
-            One finger (thumb tucked) + move = orbit · Otherwise: pinch fingers together = zoom out, spread thumb and
-            index apart = zoom in
-          </div>
         </>
       )}
       {status !== "running" && (

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback, useMemo, Suspense } from "rea
 import type { MutableRefObject } from "react";
 import dynamic from "next/dynamic";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { OrbitControls, Environment } from "@react-three/drei";
+import { OrbitControls, Environment, useProgress } from "@react-three/drei";
 import FolioCar from "@/components/FolioCar";
 import type { CarInput } from "@/components/FolioCarBase";
 import type { CarModel, CarPose } from "@/components/FolioCar";
@@ -22,6 +22,8 @@ import {
 } from "@/components/Terrain";
 import * as THREE from "three";
 import Minimap from "@/components/Minimap";
+import { resolveCameraOffset, isOffsetClear } from "@/components/cameraOcclusion";
+import { setCircleColliders, clearCircleColliders } from "@/components/trackCollision";
 
 const HandGestures = dynamic(() => import("@/components/HandGestures"), { ssr: false });
 import ChessKnight from "@/components/ChessKnight";
@@ -126,22 +128,75 @@ function FreeCamControls({
   const internalRef = useRef<any>(null);
   const controlsRef = externalRef ?? internalRef;
   // Start looking in this direction, attached to the car (orbit target follows car)
-  const baseDefaultDistance = 38;
+  const baseDefaultDistance = 32.6;
   const startDistance = mobile ? baseDefaultDistance * 1.2 : baseDefaultDistance * 0.95; // mobile: zoom out more, PC: zoom in 5% on start
   const minDistance = 12;
   const maxDistance = 80;
-  const viewDir = useMemo(() => new THREE.Vector3(-0.699, -0.12, -0.705).normalize(), []);
+  // Low chase view from behind the car, looking mostly along the road (west) with the logos and diploma ahead,
+  // turned ~14 degrees toward the infield (matches the reference screenshot).
+  const viewDir = useMemo(() => new THREE.Vector3(-0.968, -0.031, -0.249).normalize(), []);
   const carDelta = useMemo(() => new THREE.Vector3(), []);
 
-  // Keep the orbit pivot on the car so camera stays attached and moves with it
+  // Camera vs. buildings (cameraOcclusion.ts). The orbit state (where the player put the camera) is never changed:
+  // each frame the camera is moved out from behind a building after the controls ran, and put back before they run.
+  const occ = useMemo(
+    () => ({
+      desiredPos: new THREE.Vector3(), // where the controls/player had the camera
+      appliedPos: new THREE.Vector3(), // where we moved it to, to tell whether anything else moved it since
+      offset: new THREE.Vector3(),
+      resolved: new THREE.Vector3(),
+      shown: new THREE.Vector3(),
+      eased: new THREE.Vector3(),
+      applied: false,
+      displaced: false,
+    }),
+    []
+  );
+
+  // Before the controls update (priority -1): take back last frame's displacement. If something else moved the
+  // camera in between (hand gestures), keep that.
   useFrame(() => {
+    if (!occ.applied) return;
+    occ.applied = false;
+    if (camera.position.distanceToSquared(occ.appliedPos) < 1e-10) camera.position.copy(occ.desiredPos);
+  }, -2);
+
+  // Keep the orbit pivot on the car so camera stays attached and moves with it
+  useFrame((_, delta) => {
     const c = controlsRef.current;
-    if (!c || inspecting) return;
+    if (!c) return;
+    if (inspecting) {
+      occ.displaced = false;
+      return;
+    }
     const p = pose.current;
     carDelta.set(p.x, p.y + 1.2, p.z).sub(c.target);
-    if (carDelta.lengthSq() < 1e-8) return;
-    c.target.add(carDelta);
-    camera.position.add(carDelta);
+    if (carDelta.lengthSq() >= 1e-8) {
+      c.target.add(carDelta);
+      camera.position.add(carDelta);
+    }
+
+    // Out from behind buildings: tilt up / pull in only while one is in the way, and ease back once it is clear
+    occ.desiredPos.copy(camera.position);
+    occ.offset.copy(camera.position).sub(c.target);
+    resolveCameraOffset(c.target, occ.offset, occ.resolved);
+    const blocked = occ.resolved.distanceToSquared(occ.offset) > 1e-6;
+    if (!blocked && !occ.displaced) return;
+    if (!occ.displaced) {
+      occ.shown.copy(occ.resolved); // just got blocked: jump out at once, never show the inside of a wall
+    } else {
+      occ.eased.copy(occ.shown).lerp(occ.resolved, 1 - Math.exp(-8 * Math.min(delta, 0.05)));
+      occ.shown.copy(isOffsetClear(c.target, occ.eased) ? occ.eased : occ.resolved);
+    }
+    occ.displaced = true;
+    if (occ.shown.distanceToSquared(occ.offset) < 1e-4) {
+      occ.displaced = false; // eased all the way back to where the player has it
+      return;
+    }
+    camera.position.copy(c.target).add(occ.shown);
+    camera.lookAt(c.target); // the controls aimed it from the old position
+    occ.appliedPos.copy(camera.position);
+    occ.applied = true;
   });
 
   // Place camera once at start looking in requested direction toward the car
@@ -475,8 +530,6 @@ export default function FolioScene() {
   const [showMinimap, setShowMinimap] = useState(false);
   const [zoomMultiplier, setZoomMultiplier] = useState(1.0);
   const [carResetKey, setCarResetKey] = useState(0);
-  // Temporary model rotation debug controls (degrees) - LinkedIn
-  const [linkedinRotDeg, setLinkedinRotDeg] = useState({ x: 90, y: 0, z: -50 });
   const [camEdit, setCamEdit] = useState({ x: 20, y: 26, z: 20 });
   const [camApplyTick, setCamApplyTick] = useState(0);
   const [manualCamHold, setManualCamHold] = useState(false);
@@ -670,20 +723,15 @@ export default function FolioScene() {
     return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
   }, []);
 
-  // Synthetic progress while the scene builds: creep up to 92% quickly, then the
-  // car signals readiness and we jump to 100%.
+  // Real progress: every file the scene asks for (models, textures) goes through three's loading manager, so
+  // loaded / total is the true share that has arrived. The total grows as the scene discovers more files, so the
+  // bar never moves backwards; files are worth 0-95% and the last 5% is the car appearing in the scene.
+  const { loaded: filesLoaded, total: filesTotal } = useProgress();
   useEffect(() => {
     if (sceneReady) { setLoadProgress(100); return; }
-    if (!canvasDeferred || carReady) return;
-    let t = 0;
-    const interval = setInterval(() => {
-      t += 80;
-      // Ease-out curve capping at 92% until the car is actually ready
-      const p = 92 * (1 - Math.exp(-t / 450));
-      setLoadProgress((prev) => Math.max(prev, Math.min(92, p)));
-    }, 80);
-    return () => clearInterval(interval);
-  }, [canvasDeferred, carReady, sceneReady]);
+    const files = filesTotal > 0 ? (filesLoaded / filesTotal) * 95 : 0;
+    setLoadProgress((prev) => Math.max(prev, carReady ? 100 : Math.min(95, files)));
+  }, [filesLoaded, filesTotal, carReady, sceneReady]);
 
   // Called by FolioCar only after the GLB body has mounted in the scene.
   const handleSceneReady = useCallback(() => {
@@ -694,6 +742,16 @@ export default function FolioScene() {
     readySignaled.current = true;
     // Let the ring visibly reach 100% before fading the overlay out.
     setTimeout(() => setSceneReady(true), 350);
+  }, []);
+
+  // Solid hologram projectors (knight, neural network): the car can't drive through them.
+  // The other landmarks (printer, mailbox, LinkedIn, diploma, robot arm) register their own colliders.
+  useEffect(() => {
+    setCircleColliders("landmark-holograms", [
+      { x: KNIGHT_POS.x, z: KNIGHT_POS.z, r: 1.5 },
+      { x: NEURAL_POS.x, z: NEURAL_POS.z, r: 1.5 },
+    ]);
+    return () => clearCircleColliders("landmark-holograms");
   }, []);
 
   const set = (k: keyof CarInput, v: 0 | 1) => {
@@ -842,8 +900,8 @@ export default function FolioScene() {
       {canvasDeferred && (
         <Canvas
           key={view === "track" ? "track" : "lab"}
-          shadows
-          dpr={[1, 1.5]}
+          shadows="percentage"
+          dpr={[1, 1.25]}
           frameloop="always"
           performance={{ min: 0.5 }}
           camera={
@@ -874,7 +932,7 @@ export default function FolioScene() {
                 intensity={0.85}
                 color="#c9d8ff"
                 castShadow
-                shadow-mapSize={[1024, 1024]}
+                shadow-mapSize={[512, 512]}
                 shadow-camera-near={10}
                 shadow-camera-far={220}
                 shadow-camera-left={-75}
@@ -934,11 +992,6 @@ export default function FolioScene() {
                 onNearChange={(near) => handleLandmarkNearChange("linkedin", near)}
                 onInspectToggle={(on) => setInspecting(on ? "linkedin" : null)}
                 touch={isTouch}
-                debugRotation={{
-                  x: (linkedinRotDeg.x * Math.PI) / 180,
-                  y: (linkedinRotDeg.y * Math.PI) / 180,
-                  z: (linkedinRotDeg.z * Math.PI) / 180,
-                }}
               />
               <MobileTapHandler pose={pose} />
               <CarLoadingHologram pose={pose} visible={!carLoaded} night={night} />

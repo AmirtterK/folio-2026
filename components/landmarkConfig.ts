@@ -1,3 +1,12 @@
+/** Where the car starts (the grid on the main straight). Same point as TRACK_START in RacingTrack.tsx. */
+export const CAR_START = { x: 30.15, z: 57.15 };
+
+/**
+ * Rotation about +y that turns a model whose front is local +z toward the car's starting position. This is what
+ * the diploma's hard-coded 50 degrees stands for (it is 52 degrees from where the diploma stands).
+ */
+export const yawToStart = (x: number, z: number) => Math.atan2(CAR_START.x - x, CAR_START.z - z);
+
 /** Project holograms - in front of the start line, off-road */
 export const NEURAL_POS = {
   x: -18,
@@ -11,16 +20,24 @@ export const KNIGHT_POS = {
   yaw: Math.PI,
 };
 
-/** Ricoh printer (resume) - in a row near the robot arm, off the track */
+/*
+ * Contact landmarks: spread out through the open infield next to the project holograms (the big empty area in the
+ * south-west of the loop), at least ~17 units from the road, each one turned toward the car's start like the diploma.
+ * (Gmail and LinkedIn used to stand on the road itself.)
+ */
+
+/** Ricoh printer (resume) */
 export const PRINTER_POS = {
-  x: -36,
-  z: 32,
+  x: -76,
+  z: 20,
+  yaw: yawToStart(-76, 20),
 };
 
-/** Gmail mailbox (email) - in a row near the robot arm, off the track */
+/** Gmail mailbox (email) */
 export const GMAIL_POS = {
-  x: -8,
-  z: 26,
+  x: -52,
+  z: 6,
+  yaw: yawToStart(-52, 6),
 };
 
 /** Diploma - in front of the start line, off-road */
@@ -30,10 +47,11 @@ export const DIPLOMA_POS = {
   rotY: 0,
 };
 
-/** LinkedIn logo - in a row near the robot arm, off the track */
+/** LinkedIn logo */
 export const LINKEDIN_POS = {
-  x: 22,
-  z: 30,
+  x: -78,
+  z: -12,
+  yaw: yawToStart(-78, -12),
 };
 
 /**

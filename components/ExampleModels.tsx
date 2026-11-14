@@ -20,13 +20,15 @@ import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.j
 import { ColladaLoader } from "three/examples/jsm/loaders/ColladaLoader.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { groundHeight } from "@/components/Terrain";
+import { setCircleColliders, clearCircleColliders } from "@/components/trackCollision";
 
 /**
  * Where the example models stand in the infield/center.
+ * The robot arm used to stand right on top of the diploma (8, 40); it is now out in the open, 20 units east of it.
  */
 export const EXAMPLE_POSITIONS = {
   coffeemat: [18, 0, 42] as [number, number, number],
-  robot: [6, 0, 42] as [number, number, number],
+  robot: [28, 0, 40] as [number, number, number],
 };
 
 /* ------------------------------------------------------------------ */
@@ -218,6 +220,16 @@ function KinematicsRobot({ position }: { position: [number, number, number] }) {
       cancelled = true;
     };
   }, []);
+
+  // solid: the car can't drive through the arm's base (a circle sized from the model's footprint)
+  useEffect(() => {
+    if (!obj) return;
+    obj.updateMatrixWorld(true);
+    const size = new THREE.Box3().setFromObject(obj).getSize(new THREE.Vector3());
+    const r = THREE.MathUtils.clamp(Math.max(size.x, size.z) * 0.5 * ROBOT_SCALE * 0.45, 1.2, 2.6);
+    setCircleColliders("landmark-robot", [{ x: position[0], z: position[2], r }]);
+    return () => clearCircleColliders("landmark-robot");
+  }, [obj, position]);
 
   // Animate robot joints smoothly
   useFrame((state, dt) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef } from "react";
 import type { MutableRefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
@@ -9,6 +9,18 @@ import RAPIER from "@dimforge/rapier3d-compat";
 import type { CarPose } from "@/components/FolioCar";
 import { groundHeight } from "@/components/Terrain";
 import { usePhysics, isWorldFreed } from "@/components/PhysicsProvider";
+import CityRing from "@/components/CityRing";
+import { TrackRails, TrackCones } from "@/components/TrackFurniture";
+import {
+  TrackField,
+  ribbonCenterline,
+  setTrackCorridor,
+  clearTrackCorridor,
+  setTrackRail,
+  clearTrackRail,
+  setCircleColliders,
+  clearCircleColliders,
+} from "@/components/trackCollision";
 
 /* ---------- Monza Circuit Accurate Layout & Coordinates ---------- */
 
@@ -64,63 +76,19 @@ function createCheckeredTexture(): THREE.CanvasTexture {
   return tex;
 }
 
-/* ---------- Red & White Curbs + Asphalt Road Texture ---------- */
+/* ---------- Road texture: asphalt with white edge lines and a dashed centre line (from the street model) ---------- */
 
-function createTrackTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement("canvas");
-  canvas.width = 128;
-  canvas.height = 512;
-  const ctx = canvas.getContext("2d")!;
+/** World units covered by one repeat of road.jpg along the track (it holds two centre dashes). */
+export const ROAD_PERIOD = 9.4;
 
-  // Dark asphalt base in the center with realistic race surface grain
-  ctx.fillStyle = "#363238";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // Asphalt fine texture speckles
-  for (let i = 0; i < 2200; i++) {
-    const rx = Math.random() * canvas.width;
-    const ry = Math.random() * canvas.height;
-    ctx.fillStyle = Math.random() > 0.5 ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.06)";
-    ctx.fillRect(rx, ry, 2, 2);
-  }
-
-  // Curb height: 46px on top (V ~ 0) and 46px on bottom (V ~ 1)
-  const curbHeight = 46;
-  const halfW = canvas.width / 2; // 64px red, 64px white
-
-  // Top curb (V: 0 to ~0.09): Red / White alternating pavement blocks
-  ctx.fillStyle = "#d82424"; // Monza Racing Red
-  ctx.fillRect(0, 0, halfW, curbHeight);
-  ctx.fillStyle = "#f5f5f5"; // Monza White
-  ctx.fillRect(halfW, 0, halfW, curbHeight);
-
-  // Top curb inner edge / boundary line
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, curbHeight, canvas.width, 4);
-
-  // Bottom curb (V: ~0.91 to 1.0): Red / White alternating pavement blocks
-  ctx.fillStyle = "#d82424";
-  ctx.fillRect(0, canvas.height - curbHeight, halfW, curbHeight);
-  ctx.fillStyle = "#f5f5f5";
-  ctx.fillRect(halfW, canvas.height - curbHeight, halfW, curbHeight);
-
-  // Bottom curb inner edge / boundary line
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, canvas.height - curbHeight - 4, canvas.width, 4);
-
-  // Outer dark rim lines separating curbs from grass
-  ctx.fillStyle = "#181519";
-  ctx.fillRect(0, 0, canvas.width, 2);
-  ctx.fillRect(0, canvas.height - 2, canvas.width, 2);
-
-  const tex = new THREE.CanvasTexture(canvas);
+function createTrackTexture(): THREE.Texture {
+  const tex = new THREE.TextureLoader().load("/models/track/road.jpg");
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.ClampToEdgeWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
   return tex;
 }
-
 /* ---------- Procedural Monza Geometry Generator ---------- */
 
 export function buildMonzaGeometry(width = 14, period = 3.2, yOffset = 0) {
@@ -255,6 +223,10 @@ export function buildMonzaGeometry(width = 14, period = 3.2, yOffset = 0) {
 
   const pts = curve.getSpacedPoints(SAMPLES);
   let cumulativeDist = 0;
+  // adjust the repeat length slightly so the texture (and its dashes) tile exactly around the closed loop
+  let loopLength = 0;
+  for (let i = 0; i < SAMPLES; i++) loopLength += pts[i].distanceTo(pts[(i + 1) % SAMPLES]);
+  const stripe = loopLength / Math.max(1, Math.round(loopLength / STRIPE_PERIOD));
 
   for (let i = 0; i <= SAMPLES; i++) {
     const p = pts[i % SAMPLES];
@@ -268,7 +240,7 @@ export function buildMonzaGeometry(width = 14, period = 3.2, yOffset = 0) {
       cumulativeDist += p.distanceTo(prevPt);
     }
 
-    const u = cumulativeDist / STRIPE_PERIOD;
+    const u = cumulativeDist / stripe;
     const halfW = TRACK_WIDTH / 2;
 
     // Left vertex (v = 0)
@@ -552,8 +524,8 @@ function TrackLamps({
     root.traverse((o) => {
       const m = o as THREE.Mesh;
       if ((m as any).isMesh) {
-        m.castShadow = true;
-        m.receiveShadow = true;
+        m.castShadow = false;
+        m.receiveShadow = false;
       }
     });
 
@@ -621,11 +593,50 @@ function TrackLamps({
     return out;
   }, [geometry]);
 
-  // Fixed colliders so the car can't crash through lamps
+  // Where the pole actually stands inside the lamp group: the middle of the lowest part of the model.
+  // (The model is centred on its bounding box, arm included, so the pole is not at the group origin.)
+  const pole = useMemo(() => {
+    lampModel.updateMatrixWorld(true);
+    const v = new THREE.Vector3();
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    lampModel.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!(m as any).isMesh) return;
+      const attr = m.geometry.attributes.position;
+      for (let i = 0; i < attr.count; i++) {
+        v.fromBufferAttribute(attr, i).applyMatrix4(m.matrixWorld);
+        if (v.y > 0.35) continue;
+        if (v.x < minX) minX = v.x;
+        if (v.x > maxX) maxX = v.x;
+        if (v.z < minZ) minZ = v.z;
+        if (v.z > maxZ) maxZ = v.z;
+      }
+    });
+    return maxX >= minX ? { x: (minX + maxX) / 2, z: (minZ + maxZ) / 2 } : { x: 0, z: 0 };
+  }, [lampModel]);
+
+  // World position of every lamp pole (lamp group at (x, z), turned by rot around Y)
+  const solids = useMemo(
+    () =>
+      lamps.map((l) => {
+        const c = Math.cos(l.rot);
+        const s = Math.sin(l.rot);
+        return { x: l.x + pole.x * c + pole.z * s, z: l.z - pole.x * s + pole.z * c, r: 0.55 };
+      }),
+    [lamps, pole]
+  );
+
+  // The car is stopped by these through trackCollision (it asks groundCollide every frame)
+  useEffect(() => {
+    setCircleColliders("lamps", solids);
+    return () => clearCircleColliders("lamps");
+  }, [solids]);
+
+  // Fixed colliders so the pushable logos and tyres can't roll through the lamps either
   useEffect(() => {
     if (!world || isWorldFreed(world)) return;
     const bodies: RAPIER.RigidBody[] = [];
-    for (const l of lamps) {
+    for (const l of solids) {
       const y = groundHeight(l.x, l.z);
       const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(l.x, y + 1.4, l.z));
       world.createCollider(RAPIER.ColliderDesc.cylinder(1.4, 0.35), body);
@@ -637,7 +648,7 @@ function TrackLamps({
         try { world.removeRigidBody(b); } catch {}
       }
     };
-  }, [world, lamps]);
+  }, [world, solids]);
 
   return (
     <group>
@@ -648,129 +659,6 @@ function TrackLamps({
           <mesh position={[LAMP_HEAD.out, 0.07, 0]} rotation={[-Math.PI / 2, 0, 0]} material={poolMat} renderOrder={3}>
             <planeGeometry args={[17, 17]} />
           </mesh>
-        </group>
-      ))}
-    </group>
-  );
-}
-
-function prepareBuildingModel(scene: THREE.Object3D, targetSize: number) {
-  const root = scene.clone(true);
-  root.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if ((m as any).isMesh) {
-      m.castShadow = true;
-      m.receiveShadow = true;
-    }
-  });
-  const box = new THREE.Box3().setFromObject(root);
-  const size = new THREE.Vector3();
-  box.getSize(size);
-  const maxDim = Math.max(size.x, size.z, 0.001);
-  const s = targetSize / maxDim;
-  root.scale.setScalar(s);
-  root.updateMatrixWorld(true);
-  const box2 = new THREE.Box3().setFromObject(root);
-  const center = new THREE.Vector3();
-  box2.getCenter(center);
-  root.position.x -= center.x;
-  root.position.z -= center.z;
-  root.position.y -= box2.min.y;
-  const finalSize = new THREE.Vector3();
-  box2.getSize(finalSize).multiplyScalar(1); // after recenter, size same
-  return { root, scale: s, footprint: Math.max(finalSize.x, finalSize.z) };
-}
-
-type BuildingPlacement = {
-  key: string;
-  url: string;
-  pos: [number, number];
-  rot: number;
-  target: number; // footprint target (larger => generally bigger/taller presence)
-  collider: [number, number, number]; // half extents x,y,z
-};
-
-function BuildingsRing() {
-  const asian = useGLTF("/models/examples/asian_themed_low_poly_night_city_buildings.glb");
-  const sf = useGLTF("/models/examples/san_francisco_city.glb");
-  const chicago = useGLTF("/models/examples/realistic_chicago_buildings.glb");
-  const gameReady = useGLTF("/models/examples/game_ready_city_buildings.glb");
-  const { world } = usePhysics();
-
-  const models = useMemo(() => {
-    return {
-      asian: prepareBuildingModel(asian.scene, 1).root, // scaled per placement below
-      sf: sf.scene,
-      chicago: chicago.scene,
-      gameReady: gameReady.scene,
-    };
-  }, [asian.scene, sf.scene, chicago.scene, gameReady.scene]);
-
-  // Arrange buildings close around the track (track ~ x[-140,140], z[-85,85]) as a surrounding barrier.
-  // Use only 1 San Francisco city; keep close buildings smaller and overlap colliders to block leaving the track area.
-  const placements = useMemo<BuildingPlacement[]>(
-    () => [
-      // North side (top)
-      { key: "chicago-nw", url: "chicago", pos: [-95, -125], rot: Math.PI * 0.55, target: 60, collider: [55, 22, 55] },
-      { key: "asian-n", url: "asian", pos: [0, -128], rot: Math.PI / 2, target: 65, collider: [60, 20, 55] },
-      { key: "game-ne", url: "gameReady", pos: [95, -125], rot: Math.PI * 0.4, target: 55, collider: [55, 20, 55] },
-      // East side
-      { key: "sf-e", url: "sf", pos: [160, -55], rot: Math.PI, target: 85, collider: [60, 24, 55] },
-      { key: "chicago-e", url: "chicago", pos: [160, 55], rot: Math.PI * 0.95, target: 60, collider: [55, 22, 55] },
-      // South side
-      { key: "asian-se", url: "asian", pos: [95, 125], rot: -Math.PI * 0.45, target: 65, collider: [55, 20, 55] },
-      { key: "game-s", url: "gameReady", pos: [0, 128], rot: -Math.PI / 2, target: 58, collider: [60, 20, 55] },
-      { key: "chicago-sw", url: "chicago", pos: [-95, 125], rot: -Math.PI * 0.6, target: 60, collider: [55, 22, 55] },
-      // West side
-      { key: "asian-w", url: "asian", pos: [-160, 55], rot: 0.05, target: 65, collider: [55, 20, 55] },
-      { key: "game-w", url: "gameReady", pos: [-160, -55], rot: -0.05, target: 58, collider: [55, 20, 55] },
-    ],
-    []
-  );
-
-  const prepared = useMemo(() => {
-    const map: Record<string, THREE.Object3D> = {
-      asian: asian.scene,
-      sf: sf.scene,
-      chicago: chicago.scene,
-      gameReady: gameReady.scene,
-    };
-    return placements.map((p) => {
-      const { root } = prepareBuildingModel(map[p.url], p.target);
-      return { ...p, root };
-    });
-  }, [placements, asian.scene, sf.scene, chicago.scene, gameReady.scene]);
-
-  useEffect(() => {
-    if (!world || isWorldFreed(world)) return;
-    const bodies: RAPIER.RigidBody[] = [];
-    for (const p of placements) {
-      const y = groundHeight(p.pos[0], p.pos[1]);
-      const body = world.createRigidBody(
-        RAPIER.RigidBodyDesc.fixed()
-          .setTranslation(p.pos[0], y + p.collider[1], p.pos[1])
-          .setRotation(new RAPIER.Quaternion(0, Math.sin(p.rot / 2), 0, Math.cos(p.rot / 2)))
-      );
-      world.createCollider(RAPIER.ColliderDesc.cuboid(p.collider[0], p.collider[1], p.collider[2]), body);
-      bodies.push(body);
-    }
-    return () => {
-      if (isWorldFreed(world)) return;
-      for (const b of bodies) {
-        try { world.removeRigidBody(b); } catch {}
-      }
-    };
-  }, [world, placements]);
-
-  return (
-    <group>
-      {prepared.map((p) => (
-        <group
-          key={p.key}
-          position={[p.pos[0], groundHeight(p.pos[0], p.pos[1]), p.pos[1]]}
-          rotation={[0, p.rot, 0]}
-        >
-          <primitive object={p.root.clone()} />
         </group>
       ))}
     </group>
@@ -859,8 +747,8 @@ function MiddleTires() {
     root.traverse((o) => {
       const m = o as THREE.Mesh;
       if ((m as any).isMesh) {
-        m.castShadow = true;
-        m.receiveShadow = true;
+        m.castShadow = false;
+        m.receiveShadow = false;
       }
     });
     const box = new THREE.Box3().setFromObject(root);
@@ -950,7 +838,19 @@ export function RacingTrack({ showCurbs = true, night = false, withTerrain = tru
     });
   }, []);
 
-  const monzaGeometry = useMemo(() => buildMonzaGeometry(), []);
+  const monzaGeometry = useMemo(() => buildMonzaGeometry(14, ROAD_PERIOD), []);
+
+  // The invisible wall: outside the loop the car can't get further than TRACK_WALL_DISTANCE from the road,
+  // and the ring of buildings stands flush against it (see trackCollision.ts and CityRing.tsx).
+  const trackField = useMemo(() => new TrackField(ribbonCenterline(monzaGeometry)), [monzaGeometry]);
+  useEffect(() => {
+    setTrackCorridor(trackField);
+    setTrackRail(trackField);
+    return () => {
+      clearTrackCorridor(trackField);
+      clearTrackRail(trackField);
+    };
+  }, [trackField]);
 
   return (
     <group>
@@ -961,10 +861,21 @@ export function RacingTrack({ showCurbs = true, night = false, withTerrain = tru
         </mesh>
       )}
 
-      <BuildingsRing />
-      <MiddleTires />
+      {/* Each model-loading piece has its own Suspense so the car and track appear without waiting for the city */}
+      <Suspense fallback={null}>
+        <CityRing field={trackField} />
+      </Suspense>
+      <TrackRails field={trackField} />
+      <TrackCones />
+      <Suspense fallback={null}>
+        <MiddleTires />
+      </Suspense>
 
-      {night && <TrackLamps geometry={monzaGeometry} pose={pose} />}
+      {night && (
+        <Suspense fallback={null}>
+          <TrackLamps geometry={monzaGeometry} pose={pose} />
+        </Suspense>
+      )}
 
       {/* Monza Asphalt Road Ribbon with Flat Red & White Pavement Curbs */}
       <mesh
@@ -1214,10 +1125,5 @@ export function FolioTopDownCam({
 }
 
 useGLTF.preload("/models/examples/simple_collection_of_low_poly_street_lights.glb");
-useGLTF.preload("/models/examples/asian_themed_low_poly_night_city_buildings.glb");
 useGLTF.preload("/models/examples/low_poly_tire_fixed.glb");
 
-useGLTF.preload("/models/examples/san_francisco_city.glb");
-
-useGLTF.preload("/models/examples/game_ready_city_buildings.glb");
-useGLTF.preload("/models/examples/realistic_chicago_buildings.glb");

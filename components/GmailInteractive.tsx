@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
@@ -11,6 +11,7 @@ import { GMAIL_POS, KEY_PROMPT_OFFSET_FROM_HOLOGRAM } from "@/components/landmar
 import HoloText from "@/components/HoloText";
 import HoloKeyPrompt from "@/components/HoloKeyPrompt";
 import { GMAIL_LINES } from "@/components/landmarkProjects";
+import { boxCircles, setCircleColliders, clearCircleColliders } from "@/components/trackCollision";
 
 export { GMAIL_POS };
 
@@ -47,9 +48,11 @@ export default function GmailInteractive({
     });
     // Apply scale + rotation, then center on XZ and sit on the ground
     clone.scale.setScalar(1.2);
-    clone.rotation.set(0, (Math.PI * 50) / 180, 0);
+    clone.rotation.set(0, GMAIL_POS.yaw, 0); // faces the car's start, like the diploma
     clone.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(clone);
+    const fp = box.getSize(new THREE.Vector3());
+    clone.userData.footprint = { x: fp.x, z: fp.z }; // for the solid collider below
     const center = new THREE.Vector3();
     box.getCenter(center);
     if (isFinite(box.min.y)) {
@@ -59,6 +62,14 @@ export default function GmailInteractive({
     }
     return clone;
   }, [scene]);
+
+  // solid: the car can't drive through it
+  useEffect(() => {
+    const fp = model.userData.footprint as { x: number; z: number } | undefined;
+    if (!fp) return;
+    setCircleColliders("landmark-gmail", boxCircles(GMAIL_POS.x, GMAIL_POS.z, fp.x, fp.z));
+    return () => clearCircleColliders("landmark-gmail");
+  }, [model]);
 
   useFrame(() => {
     const p = pose.current;
@@ -101,6 +112,15 @@ export default function GmailInteractive({
 
       {/* Plain mailbox model, grounded/centered above the terrain */}
       <primitive object={model} />
+
+      {/* Same warm light as the printer (a bit weaker: the model is smaller, so the light sits closer) */}
+      <pointLight
+        position={[Math.sin(GMAIL_POS.yaw) * 3, 4.5, Math.cos(GMAIL_POS.yaw) * 3]}
+        color="#ffe6c0"
+        intensity={night ? 180 : 45}
+        distance={22}
+        decay={2}
+      />
 
       <group position={textPos}>
         <HoloText lines={GMAIL_LINES} active={inspecting} night={night} mobile={touch} />

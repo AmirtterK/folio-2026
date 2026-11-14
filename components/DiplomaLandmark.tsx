@@ -1,7 +1,7 @@
 // components/DiplomaLandmark.tsx
 "use client";
 import * as THREE from "three";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Group } from "three";
 import type { MutableRefObject } from "react";
 import { useFrame } from "@react-three/fiber";
@@ -12,6 +12,7 @@ import { DIPLOMA_POS, KEY_PROMPT_OFFSET_FROM_HOLOGRAM } from "@/components/landm
 import HoloText from "@/components/HoloText";
 import HoloKeyPrompt from "@/components/HoloKeyPrompt";
 import { DIPLOMA_LINES } from "@/components/landmarkProjects";
+import { setCircleColliders, clearCircleColliders } from "@/components/trackCollision";
 
 const HEIGHT = 2.88;  // diploma height in world units (+20%)
 const THICK = 0.192;   // slab thickness (+20%)
@@ -83,6 +84,21 @@ export default function DiplomaLandmark({
   });
 
   const rot = debugRotation ?? { x: 0, y: (Math.PI * 50) / 180, z: 0 };
+
+  // solid: a row of circles along the diploma's width (it is turned by rot.y), so the car can't drive through or under it
+  useEffect(() => {
+    const r = 0.8;
+    const half = Math.max(0, w / 2 - r);
+    const n = Math.max(1, Math.ceil((half * 2) / r) + 1);
+    const dx = Math.cos(rot.y);
+    const dz = -Math.sin(rot.y);
+    const list = Array.from({ length: n }, (_, i) => {
+      const t = n === 1 ? 0 : -half + (2 * half * i) / (n - 1);
+      return { x: DIPLOMA_POS.x + dx * t, z: DIPLOMA_POS.z + dz * t, r };
+    });
+    setCircleColliders("landmark-diploma", list);
+    return () => clearCircleColliders("landmark-diploma");
+  }, [w, rot.y]);
 
   const holoAnchor: [number, number, number] = [w * 0.6 + 1.8, -1.0, 0.0];
   const promptPos: [number, number, number] = promptPosition ?? [

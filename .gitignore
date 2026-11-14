@@ -33,3 +33,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# backups of the original (pre-optimisation) city models, made by scripts/optimize-city-models.mjs
+/scripts/_orig_models/

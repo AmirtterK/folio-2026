@@ -63,25 +63,10 @@ export default function Page() {
         style={{
           position: "fixed",
           inset: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
           background: "#000000",
           pointerEvents: "none",
         }}
-      >
-        <div
-          style={{
-            width: 46,
-            height: 46,
-            borderRadius: "50%",
-            border: "4px solid rgba(255,255,255,0.14)",
-            borderTopColor: "#111111",
-            animation: "bootSpin 0.9s linear infinite",
-          }}
-        />
-        <style>{`@keyframes bootSpin { to { transform: rotate(360deg); } }`}</style>
-      </div>
+      />
       <FolioScene />
     </>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
@@ -11,6 +11,7 @@ import { PRINTER_POS, KEY_PROMPT_OFFSET_FROM_HOLOGRAM } from "@/components/landm
 import HoloText from "@/components/HoloText";
 import HoloKeyPrompt from "@/components/HoloKeyPrompt";
 import { PRINTER_LINES } from "@/components/landmarkProjects";
+import { boxCircles, setCircleColliders, clearCircleColliders } from "@/components/trackCollision";
 
 export { PRINTER_POS };
 
@@ -47,9 +48,11 @@ export default function PrinterInteractive({
     });
     // Apply scale + rotation, then center on XZ and sit on the ground
     clone.scale.setScalar(3.0);
-    clone.rotation.set(0, (Math.PI * 50) / 180, 0);
+    clone.rotation.set(0, PRINTER_POS.yaw, 0); // faces the car's start, like the diploma
     clone.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(clone);
+    const fp = box.getSize(new THREE.Vector3());
+    clone.userData.footprint = { x: fp.x, z: fp.z }; // for the solid collider below
     const center = new THREE.Vector3();
     box.getCenter(center);
     if (isFinite(box.min.y)) {
@@ -59,6 +62,14 @@ export default function PrinterInteractive({
     }
     return clone;
   }, [scene]);
+
+  // solid: the car can't drive through it
+  useEffect(() => {
+    const fp = model.userData.footprint as { x: number; z: number } | undefined;
+    if (!fp) return;
+    setCircleColliders("landmark-printer", boxCircles(PRINTER_POS.x, PRINTER_POS.z, fp.x, fp.z));
+    return () => clearCircleColliders("landmark-printer");
+  }, [model]);
 
   useFrame(() => {
     const p = pose.current;
@@ -102,6 +113,15 @@ export default function PrinterInteractive({
 
       {/* Plain printer model (2.5x, grounded/centered), no hologram base */}
       <primitive object={model} />
+
+      {/* Warm light from above, on the side that faces the car's start, so the printer isn't lost in the dark */}
+      <pointLight
+        position={[Math.sin(PRINTER_POS.yaw) * 4, 6.5, Math.cos(PRINTER_POS.yaw) * 4]}
+        color="#ffe6c0"
+        intensity={night ? 320 : 80}
+        distance={26}
+        decay={2}
+      />
 
       {/* Inspect UI: prompt + text/link (interaction logic), text revealed at key position */}
       <group position={textPos}>

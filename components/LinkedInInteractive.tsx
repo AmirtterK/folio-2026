@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
@@ -11,6 +11,7 @@ import { LINKEDIN_POS, KEY_PROMPT_OFFSET_FROM_HOLOGRAM } from "@/components/land
 import HoloText from "@/components/HoloText";
 import HoloKeyPrompt from "@/components/HoloKeyPrompt";
 import { LINKEDIN_LINES } from "@/components/landmarkProjects";
+import { boxCircles, setCircleColliders, clearCircleColliders } from "@/components/trackCollision";
 
 export { LINKEDIN_POS };
 
@@ -48,12 +49,15 @@ export default function LinkedInInteractive({
         m.receiveShadow = true;
       }
     });
-    // Default: X: 90°, Y: 0°, Z: -50° (debug override available for tuning)
-    const rot = debugRotation ?? { x: Math.PI / 2, y: 0, z: -Math.PI * 50 / 180 };
+    // Stood upright (x: 90 deg). That tilt turns the model's z rotation into a turn about the world's up axis with the
+    // opposite sign, so z = -yaw makes it face the car's start, like the diploma (the old fixed value, -50 deg, was a yaw of 50).
+    const rot = debugRotation ?? { x: Math.PI / 2, y: 0, z: -LINKEDIN_POS.yaw };
     clone.scale.setScalar(1.2);
     clone.rotation.set(rot.x, rot.y, rot.z);
     clone.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(clone);
+    const fp = box.getSize(new THREE.Vector3());
+    clone.userData.footprint = { x: fp.x, z: fp.z }; // for the solid collider below
     const center = new THREE.Vector3();
     box.getCenter(center);
     if (isFinite(box.min.y)) {
@@ -63,6 +67,14 @@ export default function LinkedInInteractive({
     }
     return clone;
   }, [scene, debugRotation?.x, debugRotation?.y, debugRotation?.z]);
+
+  // solid: the car can't drive through it
+  useEffect(() => {
+    const fp = model.userData.footprint as { x: number; z: number } | undefined;
+    if (!fp) return;
+    setCircleColliders("landmark-linkedin", boxCircles(LINKEDIN_POS.x, LINKEDIN_POS.z, fp.x, fp.z));
+    return () => clearCircleColliders("landmark-linkedin");
+  }, [model]);
 
   useFrame(() => {
     const p = pose.current;
@@ -105,6 +117,15 @@ export default function LinkedInInteractive({
 
       {/* Plain LinkedIn logo, standing upright/centered on the ground */}
       <primitive object={model} />
+
+      {/* Same warm light as the printer (a bit weaker: the model is smaller, so the light sits closer) */}
+      <pointLight
+        position={[Math.sin(LINKEDIN_POS.yaw) * 3, 4.5, Math.cos(LINKEDIN_POS.yaw) * 3]}
+        color="#ffe6c0"
+        intensity={night ? 180 : 45}
+        distance={22}
+        decay={2}
+      />
 
       <group position={textPos}>
         <HoloText lines={LINKEDIN_LINES} active={inspecting} night={night} mobile={touch} />

@@ -547,8 +547,8 @@ function TrackLamps({
       scene;
     const root = src.clone(true);
     root.traverse((o) => {
-      const m = o;
-      if (m.isMesh) {
+      const m = o as THREE.Mesh;
+      if ((m as any).isMesh) {
         m.castShadow = true;
         m.receiveShadow = true;
       }
@@ -591,16 +591,16 @@ function TrackLamps({
   );
 
   const lamps = useMemo(() => {
-    const pos = geometry.attributes.position;
+    const pos = geometry.attributes.position as THREE.BufferAttribute;
     const rows = pos.count / 2;
-    const center = (i) => {
+    const center = (i: number) => {
       const k = ((i % (rows - 1)) + (rows - 1)) % (rows - 1);
       return new THREE.Vector2(
         (pos.getX(k * 2) + pos.getX(k * 2 + 1)) / 2,
         (pos.getZ(k * 2) + pos.getZ(k * 2 + 1)) / 2
       );
     };
-    const out = [];
+    const out: { x: number; z: number; rot: number }[] = [];
     let flip = 1;
     for (let i = 0; i < rows - 1; i += 24) {
       const c = center(i);
@@ -638,8 +638,8 @@ function CityBuildings() {
   const model = useMemo(() => {
     const root = scene.clone(true);
     root.traverse((o) => {
-      const m = o;
-      if (m.isMesh) {
+      const m = o as THREE.Mesh;
+      if ((m as any).isMesh) {
         m.castShadow = true;
         m.receiveShadow = true;
       }
@@ -688,8 +688,8 @@ function MiddleTires() {
   const tireModel = useMemo(() => {
     const root = scene.clone(true);
     root.traverse((o) => {
-      const m = o;
-      if (m.isMesh) {
+      const m = o as THREE.Mesh;
+      if ((m as any).isMesh) {
         m.castShadow = true;
         m.receiveShadow = true;
       }

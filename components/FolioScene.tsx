@@ -1080,7 +1080,7 @@ export default function FolioScene() {
                 const totalRows = Math.ceil(arr.length / perRow);
                 const itemsInRow = row === totalRows - 1 ? arr.length - row * perRow : perRow;
                 const colOffset = col - (itemsInRow - 1) / 2; // centers last row when it has 2
-                const x = 8 - row * 8.0;
+                const x = 8 - row * 10.0; // 10 units between rows (was 8); the last of the 9 rows lands at x = -72, still inside the track wall
                 const z = 57 + colOffset * 4.6;
                 const logoRotation: [number, number, number] = [0.017453, 0.872665, 0]; // X:1°, Y:50°, Z:0°
                 return (

@@ -781,7 +781,7 @@ export function FolioTopDownCam({
     // Dynamic zoom based on driving speed. On phones the scene is physically small, so pull the
     // camera back to keep the car and track from feeling oversized.
     const viewAspect = size.width / Math.max(1, size.height);
-    const mobileZoom = mobile ? (viewAspect < 1 ? 2.15 : 1.9) : 1;
+    const mobileZoom = mobile ? (viewAspect < 1 ? 2.6 : 2.3) : 1;
     const baseRadius = 28 * zoomMultiplier * mobileZoom;
     const speedZoom = Math.min(14, Math.abs(p.speed) * 0.45);
     const targetRadius = baseRadius + speedZoom;
@@ -889,7 +889,7 @@ export function FolioTopDownCam({
       // Mobile portrait needs extra pull to fit the full tall projector + hologram + text above.
       let pull = 1;
       if (mobile && viewAspect < 1) {
-        pull = 1.55;
+        pull = 1.75;
       } else if (viewAspect < 1) {
         pull = Math.min(2.2, 1 / viewAspect);
       }

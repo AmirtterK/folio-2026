@@ -127,7 +127,7 @@ function FreeCamControls({
   const controlsRef = externalRef ?? internalRef;
   // Start looking in this direction, attached to the car (orbit target follows car)
   const baseDefaultDistance = 38;
-  const startDistance = mobile ? baseDefaultDistance : baseDefaultDistance * 0.95; // PC: zoom in 5% on start
+  const startDistance = mobile ? baseDefaultDistance * 1.2 : baseDefaultDistance * 0.95; // mobile: zoom out more, PC: zoom in 5% on start
   const minDistance = 12;
   const maxDistance = 80;
   const viewDir = useMemo(() => new THREE.Vector3(-0.699, -0.12, -0.705).normalize(), []);
@@ -267,29 +267,16 @@ function DayNightRig({
 
   useFrame(() => {
     const cyc = cycleRef.current;
-    const now = performance.now();
-    if (cyc.nextAt === 0) cyc.nextAt = now + DAY_NIGHT_PERIOD_MS;
-    if (cyc.startedAt < 0 && now >= cyc.nextAt) {
-      cyc.from = cyc.mix;
-      cyc.target = cyc.target === 1 ? 0 : 1;
-      cyc.startedAt = now;
-      cyc.nextAt = now + DAY_NIGHT_PERIOD_MS;
-    }
-    if (cyc.startedAt >= 0) {
-      const p = Math.min(1, Math.max(0, (now - cyc.startedAt) / DAY_NIGHT_TRANSITION_MS));
-      const e = p * p * (3 - 2 * p); // smoothstep
-      cyc.mix = cyc.from + (cyc.target - cyc.from) * e;
-      if (p >= 1) {
-        cyc.startedAt = -1;
-        cyc.mix = cyc.target;
-      }
-    }
-    apply(cyc.mix);
-    // components that only understand a boolean (street lamps, headlights, hologram blending) flip at the midpoint
-    const isNight = cyc.mix > 0.5;
-    if (lastNight.current !== isNight) {
-      lastNight.current = isNight;
-      onNightChange(isNight);
+    // Always night: disable day/night cycling and keep the scene in night mode.
+    cyc.mix = 1;
+    cyc.target = 1;
+    cyc.from = 1;
+    cyc.startedAt = -1;
+    cyc.nextAt = Infinity;
+    apply(1);
+    if (lastNight.current !== true) {
+      lastNight.current = true;
+      onNightChange(true);
     }
   });
 

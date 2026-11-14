@@ -25,10 +25,10 @@ export const groundGrip = (_x: number, _z: number) => 0.55;
 export const groundCollide = (_x: number, _z: number, _r: number): [number, number] | null => null;
 
 export const TERRAIN_BOUNDS = {
-  minX: -175,
-  maxX: 175,
-  minZ: -140,
-  maxZ: 140,
+  minX: -220,
+  maxX: 220,
+  minZ: -170,
+  maxZ: 170,
 };
 
 function createGravelTexture(): THREE.CanvasTexture {
@@ -77,7 +77,7 @@ export function Terrain({ pose: _pose, radius: _radius = Infinity }: { pose?: Mu
     <group>
       {/* flat gravel ground (slightly below track surface to avoid z-fighting) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-        <planeGeometry args={[1200, 1200]} />
+        <planeGeometry args={[520, 420]} />
         <meshStandardMaterial map={gravel} roughness={1} metalness={0} color="#b8ae9a" />
       </mesh>
     </group>

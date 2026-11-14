@@ -654,58 +654,100 @@ function TrackLamps({
   );
 }
 
-function CityBuildings() {
-  const { scene } = useGLTF("/models/examples/asian_themed_low_poly_night_city_buildings.glb");
-  const { world } = usePhysics();
-  const model = useMemo(() => {
-    const root = scene.clone(true);
-    root.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if ((m as any).isMesh) {
-        m.castShadow = true;
-        m.receiveShadow = true;
-      }
-    });
-    const box = new THREE.Box3().setFromObject(root);
-    const size = new THREE.Vector3();
-    box.getSize(size);
-    const maxDim = Math.max(size.x, size.z, 0.001);
-    const target = 240; // spread outside track bounds
-    const s = target / maxDim;
-    root.scale.setScalar(s);
-    root.updateMatrixWorld(true);
-    const box2 = new THREE.Box3().setFromObject(root);
-    const center = new THREE.Vector3();
-    box2.getCenter(center);
-    root.position.x -= center.x;
-    root.position.z -= center.z;
-    root.position.y -= box2.min.y;
-    return root;
-  }, [scene]);
+function prepareBuildingModel(scene: THREE.Object3D, targetSize: number) {
+  const root = scene.clone(true);
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if ((m as any).isMesh) {
+      m.castShadow = true;
+      m.receiveShadow = true;
+    }
+  });
+  const box = new THREE.Box3().setFromObject(root);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  const maxDim = Math.max(size.x, size.z, 0.001);
+  const s = targetSize / maxDim;
+  root.scale.setScalar(s);
+  root.updateMatrixWorld(true);
+  const box2 = new THREE.Box3().setFromObject(root);
+  const center = new THREE.Vector3();
+  box2.getCenter(center);
+  root.position.x -= center.x;
+  root.position.z -= center.z;
+  root.position.y -= box2.min.y;
+  const finalSize = new THREE.Vector3();
+  box2.getSize(finalSize).multiplyScalar(1); // after recenter, size same
+  return { root, scale: s, footprint: Math.max(finalSize.x, finalSize.z) };
+}
 
-  // Place outside track road range (TRACK_BOUNDS ~ x[-140,140], z[-85,85])
-  // Kept far out to avoid buildings clipping into the track/infield
-  const placements = useMemo(
+type BuildingPlacement = {
+  key: string;
+  url: string;
+  pos: [number, number];
+  rot: number;
+  target: number; // footprint target (larger => generally bigger/taller presence)
+  collider: [number, number, number]; // half extents x,y,z
+};
+
+function BuildingsRing() {
+  const asian = useGLTF("/models/examples/asian_themed_low_poly_night_city_buildings.glb");
+  const sf = useGLTF("/models/examples/san_francisco_city.glb");
+  const chicago = useGLTF("/models/examples/realistic_chicago_buildings.glb");
+  const gameReady = useGLTF("/models/examples/game_ready_city_buildings.glb");
+  const { world } = usePhysics();
+
+  const models = useMemo(() => {
+    return {
+      asian: prepareBuildingModel(asian.scene, 1).root, // scaled per placement below
+      sf: sf.scene,
+      chicago: chicago.scene,
+      gameReady: gameReady.scene,
+    };
+  }, [asian.scene, sf.scene, chicago.scene, gameReady.scene]);
+
+  // Arrange outside track (track ~ x[-140,140], z[-85,85]) within smaller map.
+  // Shorter/smaller buildings placed on an inner ring, larger/taller on an outer ring for depth/skyline.
+  const placements = useMemo<BuildingPlacement[]>(
     () => [
-      { pos: [-320, 0] as [number, number], rot: 0, s: 1.0 },
-      { pos: [320, 0] as [number, number], rot: Math.PI, s: 1.0 },
-      { pos: [0, -280] as [number, number], rot: Math.PI / 2, s: 1.0 },
+      // Inner ring (shorter/smaller, closer)
+      { key: "asian-ne", url: "asian", pos: [165, -115], rot: Math.PI * 0.15, target: 95, collider: [45, 14, 45] },
+      { key: "sf-se", url: "sf", pos: [170, 115], rot: -Math.PI * 0.35, target: 90, collider: [42, 14, 42] },
+      { key: "chicago-sw", url: "chicago", pos: [-165, 115], rot: Math.PI * 0.7, target: 100, collider: [48, 16, 48] },
+      { key: "game-nw", url: "gameReady", pos: [-170, -115], rot: -Math.PI * 0.1, target: 105, collider: [50, 14, 50] },
+      // Outer ring (bigger/taller, farther back)
+      { key: "chicago-n", url: "chicago", pos: [0, -150], rot: Math.PI / 2, target: 150, collider: [70, 26, 70] },
+      { key: "sf-e", url: "sf", pos: [205, 0], rot: Math.PI, target: 145, collider: [68, 24, 68] },
+      { key: "asian-s", url: "asian", pos: [0, 150], rot: -Math.PI / 2, target: 155, collider: [72, 22, 72] },
+      { key: "game-w", url: "gameReady", pos: [-205, 0], rot: 0, target: 160, collider: [75, 20, 75] },
     ],
     []
   );
 
-  // Fixed colliders so the car can't drive into buildings
+  const prepared = useMemo(() => {
+    const map: Record<string, THREE.Object3D> = {
+      asian: asian.scene,
+      sf: sf.scene,
+      chicago: chicago.scene,
+      gameReady: gameReady.scene,
+    };
+    return placements.map((p) => {
+      const { root } = prepareBuildingModel(map[p.url], p.target);
+      return { ...p, root };
+    });
+  }, [placements, asian.scene, sf.scene, chicago.scene, gameReady.scene]);
+
   useEffect(() => {
     if (!world || isWorldFreed(world)) return;
     const bodies: RAPIER.RigidBody[] = [];
     for (const p of placements) {
       const y = groundHeight(p.pos[0], p.pos[1]);
       const body = world.createRigidBody(
-        RAPIER.RigidBodyDesc.fixed().setTranslation(p.pos[0], y + 20, p.pos[1]).setRotation(
-          new RAPIER.Quaternion(0, Math.sin(p.rot / 2), 0, Math.cos(p.rot / 2))
-        )
+        RAPIER.RigidBodyDesc.fixed()
+          .setTranslation(p.pos[0], y + p.collider[1], p.pos[1])
+          .setRotation(new RAPIER.Quaternion(0, Math.sin(p.rot / 2), 0, Math.cos(p.rot / 2)))
       );
-      world.createCollider(RAPIER.ColliderDesc.cuboid(120 * p.s, 20, 120 * p.s), body);
+      world.createCollider(RAPIER.ColliderDesc.cuboid(p.collider[0], p.collider[1], p.collider[2]), body);
       bodies.push(body);
     }
     return () => {
@@ -718,71 +760,15 @@ function CityBuildings() {
 
   return (
     <group>
-      {placements.map((p, i) => (
+      {prepared.map((p) => (
         <group
-          key={i}
+          key={p.key}
           position={[p.pos[0], groundHeight(p.pos[0], p.pos[1]), p.pos[1]]}
           rotation={[0, p.rot, 0]}
-          scale={p.s}
         >
-          <primitive object={model.clone()} />
+          <primitive object={p.root.clone()} />
         </group>
       ))}
-    </group>
-  );
-}
-
-function SanFranciscoCity() {
-  const { scene } = useGLTF("/models/examples/san_francisco_city.glb");
-  const { world } = usePhysics();
-  const model = useMemo(() => {
-    const root = scene.clone(true);
-    root.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if ((m as any).isMesh) {
-        m.castShadow = true;
-        m.receiveShadow = true;
-      }
-    });
-    const box = new THREE.Box3().setFromObject(root);
-    const size = new THREE.Vector3();
-    box.getSize(size);
-    const maxDim = Math.max(size.x, size.z, 0.001);
-    const target = 240;
-    const s = target / maxDim;
-    root.scale.setScalar(s);
-    root.updateMatrixWorld(true);
-    const box2 = new THREE.Box3().setFromObject(root);
-    const center = new THREE.Vector3();
-    box2.getCenter(center);
-    root.position.x -= center.x;
-    root.position.z -= center.z;
-    root.position.y -= box2.min.y;
-    return root;
-  }, [scene]);
-
-  // Outside track bounds, far enough to avoid clipping
-  const pos: [number, number] = [0, 300];
-  const rot = -Math.PI / 2;
-
-  useEffect(() => {
-    if (!world || isWorldFreed(world)) return;
-    const y = groundHeight(pos[0], pos[1]);
-    const body = world.createRigidBody(
-      RAPIER.RigidBodyDesc.fixed().setTranslation(pos[0], y + 20, pos[1]).setRotation(
-        new RAPIER.Quaternion(0, Math.sin(rot / 2), 0, Math.cos(rot / 2))
-      )
-    );
-    world.createCollider(RAPIER.ColliderDesc.cuboid(120, 20, 120), body);
-    return () => {
-      if (isWorldFreed(world)) return;
-      try { world.removeRigidBody(body); } catch {}
-    };
-  }, [world]);
-
-  return (
-    <group position={[pos[0], groundHeight(pos[0], pos[1]), pos[1]]} rotation={[0, rot, 0]}>
-      <primitive object={model.clone()} />
     </group>
   );
 }
@@ -967,12 +953,11 @@ export function RacingTrack({ showCurbs = true, night = false, withTerrain = tru
       {/* Fallback flat ground only if Terrain heightfield is disabled */}
       {!withTerrain && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} material={groundMaterial} receiveShadow>
-          <planeGeometry args={[800, 800]} />
+          <planeGeometry args={[520, 420]} />
         </mesh>
       )}
 
-      <CityBuildings />
-      <SanFranciscoCity />
+      <BuildingsRing />
       <MiddleTires />
 
       {night && <TrackLamps geometry={monzaGeometry} pose={pose} />}
@@ -1229,3 +1214,6 @@ useGLTF.preload("/models/examples/asian_themed_low_poly_night_city_buildings.glb
 useGLTF.preload("/models/examples/low_poly_tire_fixed.glb");
 
 useGLTF.preload("/models/examples/san_francisco_city.glb");
+
+useGLTF.preload("/models/examples/game_ready_city_buildings.glb");
+useGLTF.preload("/models/examples/realistic_chicago_buildings.glb");

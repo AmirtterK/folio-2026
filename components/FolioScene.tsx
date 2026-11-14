@@ -219,7 +219,7 @@ function DayNightRig({
   const { scene } = useThree();
   const tmp = useMemo(() => new THREE.Color(), []);
   const bg = useMemo(() => new THREE.Color(), []);
-  const fog = useMemo(() => new THREE.Fog("#0c1747", 150, 780), []);
+  const fog = useMemo(() => new THREE.Fog("#0c1747", 110, 420), []);
   const lastNight = useRef<boolean | null>(null);
 
   const apply = useCallback(
@@ -230,8 +230,8 @@ function DayNightRig({
 
       scene.fog = fog;
       ramp(PAL.fog, m, fog.color);
-      fog.near = freeCam ? 250 + (150 - 250) * m : 80 + (35 - 80) * m;
-      fog.far = freeCam ? 780 : 420 + (230 - 420) * m;
+      fog.near = freeCam ? 180 + (110 - 180) * m : 60 + (30 - 60) * m;
+      fog.far = freeCam ? 420 : 300 + (170 - 300) * m;
 
       const dip = Math.sin(Math.PI * m); // 0 at full day/night, 1 at the horizon moment
       const amb = ambRef.current;
@@ -848,7 +848,7 @@ export default function FolioScene() {
           performance={{ min: 0.5 }}
           camera={
             view === "track"
-              ? { position: [20, 26, 20], fov: 26, near: 0.5, far: 800 }
+              ? { position: [20, 26, 20], fov: 26, near: 0.5, far: 500 }
               : { position: [6, 3.5, 7], fov: 40 }
           }
         >

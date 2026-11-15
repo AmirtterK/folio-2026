@@ -24,11 +24,12 @@ import type { TrackField } from "@/components/trackCollision";
 import { SOURCES, layoutCity } from "@/components/cityLayout";
 import { setOcclusionBoxes, clearOcclusionBoxes } from "@/components/cameraOcclusion";
 import type { CityPlacement, ModelDims, SourceDef, SourceId } from "@/components/cityLayout";
+import { modelUrl } from "@/components/modelUrl";
 
 const MODELS = "/models/examples/";
 
 /** One constant array so the preload and the component share a single cache entry (useGLTF keys on the whole list). */
-const MODEL_URLS = SOURCES.map((d) => MODELS + d.file);
+const MODEL_URLS = SOURCES.map((d) => modelUrl(MODELS + d.file));
 
 /** Side of a culling chunk in world units. Bigger = fewer draw calls, smaller = more culling. */
 const CELL = 90;
@@ -37,6 +38,26 @@ const MIRROR_MAX_PRIMS = 6;
 
 type Part = { geometry: THREE.BufferGeometry; mirrored: THREE.BufferGeometry | null; material: THREE.Material };
 type Prepared = { parts: Part[]; dims: ModelDims; mirrorable: boolean };
+
+/**
+ * Optimized models (public/models-opt) store vertices as quantized integers. The baking and mirroring below rewrite vertex
+ * values in place, which only works on floats, so convert the attributes we touch to Float32 first (no-op for float models).
+ */
+function toFloatAttributes(g: THREE.BufferGeometry) {
+  for (const name of ["position", "normal", "tangent", "uv", "uv1"]) {
+    const a = g.getAttribute(name);
+    if (!a || (a as THREE.BufferAttribute).array instanceof Float32Array) continue;
+    const s = a.itemSize;
+    const f = new Float32Array(a.count * s);
+    for (let i = 0; i < a.count; i++) {
+      f[i * s] = a.getX(i);
+      if (s > 1) f[i * s + 1] = a.getY(i);
+      if (s > 2) f[i * s + 2] = a.getZ(i);
+      if (s > 3) f[i * s + 3] = a.getW(i);
+    }
+    g.setAttribute(name, new THREE.BufferAttribute(f, s));
+  }
+}
 
 /** Swap two vertices of every triangle so the faces point the other way. */
 function flipWinding(g: THREE.BufferGeometry) {
@@ -102,6 +123,7 @@ function prepare(scene: THREE.Object3D, def: SourceDef): Prepared {
     const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
     const full = new THREE.Matrix4().multiplyMatrices(base, mesh.matrixWorld);
     const g = mesh.geometry.clone();
+    toFloatAttributes(g);
     g.applyMatrix4(full);
     if (full.determinant() < 0) flipWinding(g); // a negatively scaled node: keep the faces pointing outward
     g.computeBoundingBox();

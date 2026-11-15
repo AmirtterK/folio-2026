@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo, Suspense } from "react";
 import type { MutableRefObject } from "react";
@@ -8,6 +8,7 @@ import { OrbitControls, Environment, useProgress } from "@react-three/drei";
 import FolioCar from "@/components/FolioCar";
 import type { CarInput } from "@/components/FolioCarBase";
 import type { CarModel, CarPose } from "@/components/FolioCar";
+import { preloadCarModel } from "@/components/FolioCar";
 import {
   RacingTrack,
   FolioTopDownCam,
@@ -32,6 +33,7 @@ import PrinterInteractive from "@/components/PrinterInteractive";
 import GmailInteractive from "@/components/GmailInteractive";
 import DiplomaLandmark from "@/components/DiplomaLandmark";
 import LinkedInInteractive from "@/components/LinkedInInteractive";
+import ShakespeareStatue from "@/components/ShakespeareStatue";
 import CarLoadingHologram from "@/components/CarLoadingHologram";
 import MovableLogo from "@/components/MovableLogo";
 import { PhysicsProvider } from "@/components/PhysicsProvider";
@@ -40,10 +42,10 @@ import { ClaudeCodeLogo } from "@/components/ClaudeCodeLogo";
 import { CodexLogo } from "@/components/CodexLogo";
 import { OpenAILogo } from "@/components/OpenAILogo";
 import * as R3FLogos from "@/components/r3f-logos";
-import { KNIGHT_POS, NEURAL_POS, PRINTER_POS, GMAIL_POS, DIPLOMA_POS, LINKEDIN_POS } from "@/components/landmarkConfig";
+import { KNIGHT_POS, NEURAL_POS, PRINTER_POS, GMAIL_POS, DIPLOMA_POS, LINKEDIN_POS, SHAKESPEARE_POS } from "@/components/landmarkConfig";
 
 type View = "track" | "smoke";
-type LandmarkId = "knight" | "neural" | "printer" | "gmail" | "diploma" | "linkedin";
+type LandmarkId = "knight" | "neural" | "printer" | "gmail" | "diploma" | "linkedin" | "shakespeare";
 
 /* ---------- Loading Overlay ---------- */
 
@@ -137,10 +139,12 @@ function SceneSettleGate({
     if (!s.armedAt) s.armedAt = now;
     if (loading || delta > SETTLE_MAX_FRAME_S) s.good = 0;
     else s.good++;
-    const frac = Math.min(1, s.good / SETTLE_FRAMES);
+    // reported in steps of 0.05 and applied outside the frame callback: a state update on nearly every frame (the count also
+    // drops back to 0 whenever the scene stalls) can pile up into React's 'Maximum update depth exceeded'
+    const frac = Math.min(1, Math.floor((s.good / SETTLE_FRAMES) * 20) / 20);
     if (frac !== s.lastFrac) {
       s.lastFrac = frac;
-      onProgress(frac);
+      setTimeout(() => onProgress(frac), 0);
     }
     if (s.good >= SETTLE_FRAMES || now - s.armedAt > SETTLE_TIMEOUT_MS) {
       s.done = true;
@@ -643,6 +647,18 @@ export default function FolioScene() {
       cam.y += (isTouch ? 0.35 : -0.05) - 1;
       return { target, cam };
     };
+    // Shakespeare only: the camera stands straight in front of him (he faces +z) and looks along -z at his face, so
+    // the framing shift is toward screen-right = world +x, where his text floats.
+    const makeFront = (x: number, z: number) => {
+      const y = groundHeight(x, z);
+      const dir = new THREE.Vector3(0, -0.1, -1).normalize();
+      const shift = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize().multiplyScalar(isTouch ? 1.2 : 1.5);
+      const dist = (isTouch ? 11.5 : 11.0) * 1.1 + inspectCamDistanceOffset;
+      const target = new THREE.Vector3(x, y + (isTouch ? 3.4 : 2.6), z).add(shift);
+      const cam = target.clone().addScaledVector(dir, -dist);
+      cam.y += (isTouch ? -0.2 : -0.45) - 0.5;
+      return { target, cam };
+    };
     const makeContact = (x: number, z: number) => {
       const y = groundHeight(x, z);
       const dist = (isTouch ? 11.5 : 11.0) * 1.21 + inspectCamDistanceOffset; // zoom out for contacts
@@ -665,6 +681,7 @@ export default function FolioScene() {
       gmail: makeContact(GMAIL_POS.x, GMAIL_POS.z),
       diploma: makeHover(DIPLOMA_POS.x, DIPLOMA_POS.z, groundHeight(DIPLOMA_POS.x, DIPLOMA_POS.z) + 2.2),
       linkedin: makeContact(LINKEDIN_POS.x, LINKEDIN_POS.z),
+      shakespeare: makeFront(SHAKESPEARE_POS.x, SHAKESPEARE_POS.z),
     };
   }, [isTouch, inspectCamDistanceOffset]);
 
@@ -722,6 +739,8 @@ export default function FolioScene() {
               ? { x: NEURAL_POS.x, z: NEURAL_POS.z }
               : id === "printer"
               ? { x: PRINTER_POS.x, z: PRINTER_POS.z }
+              : id === "shakespeare"
+              ? { x: SHAKESPEARE_POS.x, z: SHAKESPEARE_POS.z }
               : id === "gmail"
               ? { x: GMAIL_POS.x, z: GMAIL_POS.z }
               : id === "diploma"
@@ -975,6 +994,8 @@ export default function FolioScene() {
               {/* Fog, sky colour and all lights are animated by <DayNightRig> */}
               <ambientLight ref={ambRef} intensity={0.45} color="#6a78d8" />
               <hemisphereLight ref={hemiRef} args={["#6f86d6", "#14182b", 0.45]} />
+              {/* Soft neutral-white fill (static, not touched by DayNightRig) so the road and the logos read clearer at night */}
+              <hemisphereLight args={["#ffffff", "#aab0c0", 0.22]} />
               {/* Sun / Moon key light */}
               <directionalLight
                 ref={sunRef}
@@ -1043,6 +1064,14 @@ export default function FolioScene() {
                 onInspectToggle={(on) => setInspecting(on ? "linkedin" : null)}
                 touch={isTouch}
               />
+              <ShakespeareStatue
+                pose={pose}
+                night={night}
+                inspecting={inspecting === "shakespeare"}
+                onNearChange={(near) => handleLandmarkNearChange("shakespeare", near)}
+                onInspectToggle={(on) => setInspecting(on ? "shakespeare" : null)}
+                touch={isTouch}
+              />
               <MobileTapHandler pose={pose} />
               <CarLoadingHologram pose={pose} visible={!carLoaded} night={night} />
               {[
@@ -1080,7 +1109,7 @@ export default function FolioScene() {
                 const totalRows = Math.ceil(arr.length / perRow);
                 const itemsInRow = row === totalRows - 1 ? arr.length - row * perRow : perRow;
                 const colOffset = col - (itemsInRow - 1) / 2; // centers last row when it has 2
-                const x = 8 - row * 10.0; // 10 units between rows (was 8); the last of the 9 rows lands at x = -72, still inside the track wall
+                const x = 24 - row * 11.0; // 11 units between rows; rows run x = 24 .. -64 so the last row stays on the straight, not out in the bend
                 const z = 57 + colOffset * 4.6;
                 const logoRotation: [number, number, number] = [0.017453, 0.872665, 0]; // X:1°, Y:50°, Z:0°
                 return (
@@ -1175,6 +1204,7 @@ export default function FolioScene() {
             onChange={(e) => {
               const next = e.target.value as CarModel;
               if (next === carModel) return;
+              preloadCarModel(next); // start the GLB load here, not during the car body's render
               setCarLoaded(false); // keep the new car still (and light/smoke-free) until its GLB is in
               setCarModel(next);
               resetCar(); // respawn on the grid with the new car
@@ -1198,6 +1228,7 @@ export default function FolioScene() {
             <option value="nissan">Nissan Silvia S15</option>
             <option value="porsche">Porsche Panamera</option>
             <option value="corvette">Corvette Stingray</option>
+            <option value="clio">Renault Clio 5</option>
           </select>
         </label>
 

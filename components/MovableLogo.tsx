@@ -7,6 +7,12 @@ import RAPIER from "@dimforge/rapier3d-compat";
 import type { ReactNode } from "react";
 import { groundHeight } from "@/components/Terrain";
 import { usePhysics, isWorldFreed } from "@/components/PhysicsProvider";
+import { outerRailPush } from "@/components/trackCollision";
+
+// Hover height of a logo's centre above the road (spawn height and the lowest it can sink to).
+const LOGO_HOVER = 1.7;
+// Footprint radius used against the outer barrier (the collider is 3 wide).
+const LOGO_RADIUS = 1.5;
 
 // How the logos fall after a crash throws them up. World gravity is 0, so it is done by hand here.
 // Slow, floaty gravity: a launched logo hangs for a few seconds, then drifts back down and lands softly.
@@ -31,7 +37,7 @@ export default function MovableLogo({ position, children }: MovableLogoProps) {
     if (!world || isWorldFreed(world)) return;
     const body = world.createRigidBody(
       RAPIER.RigidBodyDesc.dynamic()
-        .setTranslation(position[0], groundHeight(position[0], position[2]) + 2.0, position[2])
+        .setTranslation(position[0], groundHeight(position[0], position[2]) + LOGO_HOVER, position[2])
         .setLinearDamping(0) // damped by hand in useFrame: floaty vertically, grippy horizontally
         .setAngularDamping(2.0)
     );
@@ -70,11 +76,25 @@ export default function MovableLogo({ position, children }: MovableLogoProps) {
     const vy = THREE.MathUtils.clamp((v.y - LOGO_GRAVITY * dt) * Math.exp(-LOGO_AIR_DRAG * dt), -LOGO_MAX_FALL, LOGO_MAX_RISE);
     const slide = Math.exp(-LOGO_SLIDE_DAMP * dt);
     body.setLinvel({ x: v.x * slide, y: vy, z: v.z * slide }, true);
-    // clamp to terrain surface so they don't fall through
-    const ground = groundHeight(t.x, t.z) + 2.0;
-    if (t.y < ground) {
-      body.setTranslation({ x: t.x, y: ground, z: t.z }, true);
-      body.setLinvel({ x: body.linvel().x, y: 0, z: body.linvel().z }, true);
+    // clamp to the hover height above the road, and hold the logo inside the outer side barrier
+    const ground = groundHeight(t.x, t.z) + LOGO_HOVER;
+    const push = outerRailPush(t.x, t.z, LOGO_RADIUS);
+    if (t.y < ground || push) {
+      const lv = body.linvel();
+      let vx = lv.x;
+      let vz = lv.z;
+      if (push) {
+        const len = Math.hypot(push[0], push[1]) || 1;
+        const nx = push[0] / len;
+        const nz = push[1] / len;
+        const into = vx * nx + vz * nz;
+        if (into < 0) {
+          vx -= into * nx; // drop the part of the motion that heads into the barrier
+          vz -= into * nz;
+        }
+      }
+      body.setTranslation({ x: t.x + (push ? push[0] : 0), y: Math.max(t.y, ground), z: t.z + (push ? push[1] : 0) }, true);
+      body.setLinvel({ x: vx, y: t.y < ground ? 0 : lv.y, z: vz }, true);
     }
     const tt = body.translation();
     const rr = body.rotation();
@@ -83,7 +103,7 @@ export default function MovableLogo({ position, children }: MovableLogoProps) {
   });
 
   return (
-    <group ref={ref} position={[position[0], groundHeight(position[0], position[2]) + 2.0, position[2]]}>
+    <group ref={ref} position={[position[0], groundHeight(position[0], position[2]) + LOGO_HOVER, position[2]]}>
       {children}
     </group>
   );

@@ -10,8 +10,8 @@ import {
 } from "@/components/RacingTrack";
 
 import { FaChessKnight, FaLinkedinIn } from "react-icons/fa6";
-import { LuBrainCircuit, LuGraduationCap, LuPrinter } from "react-icons/lu";
-import { SiGmail } from "react-icons/si";import { KNIGHT_POS, NEURAL_POS, PRINTER_POS, GMAIL_POS, DIPLOMA_POS, LINKEDIN_POS } from "@/components/landmarkConfig";
+import { LuBrainCircuit, LuGraduationCap, LuPrinter, LuFeather } from "react-icons/lu";
+import { SiGmail } from "react-icons/si";import { KNIGHT_POS, NEURAL_POS, PRINTER_POS, GMAIL_POS, DIPLOMA_POS, LINKEDIN_POS, SHAKESPEARE_POS } from "@/components/landmarkConfig";
 
 // Icons sit inside the SVG pins and must never swallow clicks (tapping the map closes it)
 const PIN_ICON_STYLE = { pointerEvents: "none" } as const;
@@ -207,6 +207,12 @@ export default function Minimap({ pose, visible, onToggle }: MinimapProps) {
           <g transform={`translate(${(GMAIL_POS.x / TRACK_SCALE + TRACK_CENTER_X).toFixed(1)}, ${(GMAIL_POS.z / TRACK_SCALE + TRACK_CENTER_Z).toFixed(1)})`}>
             <circle r="14" fill="rgba(30, 12, 12, 0.85)" stroke="#ff6b6b" strokeWidth="2" />
             <SiGmail x={-8} y={-8} size={16} color="#ff6b6b" style={PIN_ICON_STYLE} />
+          </g>
+
+          {/* Shakespeare statue landmark pin (Shakespeare Says project) */}
+          <g transform={`translate(${(SHAKESPEARE_POS.x / TRACK_SCALE + TRACK_CENTER_X).toFixed(1)}, ${(SHAKESPEARE_POS.z / TRACK_SCALE + TRACK_CENTER_Z).toFixed(1)})`}>
+            <circle r="16" fill="rgba(20, 16, 10, 0.85)" stroke="#f3e7c3" strokeWidth="2.5" />
+            <LuFeather x={-9} y={-9} size={18} color="#f3e7c3" style={PIN_ICON_STYLE} />
           </g>
 
           {/* LinkedIn landmark pin */}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
+import { modelUrl } from "@/components/modelUrl";
 import * as THREE from "three";
 import { groundHeight } from "@/components/Terrain";
 import type { CarPose } from "@/components/FolioCar";
@@ -36,7 +37,7 @@ export default function PrinterInteractive({
   const isNearRef = useRef(false);
   const y = groundHeight(PRINTER_POS.x, PRINTER_POS.z);
 
-  const { scene } = useGLTF("/models/examples/ricoh_printer.glb");
+  const { scene } = useGLTF(modelUrl("/models/examples/ricoh_printer.glb"));
   const model = useMemo(() => {
     const clone = scene.clone(true);
     clone.traverse((o) => {

@@ -1,8 +1,8 @@
-import type { HoloLineSpec } from "@/components/HoloText";
+﻿import type { HoloLineSpec } from "@/components/HoloText";
 
 const SERIF = "Georgia, 'Times New Roman', serif";
-const GLOW = "#8fe6ff";
-const CORE = "#eefdff";
+const GLOW = "#3fb2ff";
+const CORE = "#9fd4ff";
 
 /** Copy for the Chess Ritter landmark, taken from folio-2025's projects.json. */
 export const KNIGHT_LINES: HoloLineSpec[] = [
@@ -424,6 +424,93 @@ export const DIPLOMA_LINES: HoloLineSpec[] = [
     color: GLOW,
     delay: 0.42,
     link: "https://krii-website.vercel.app",
+    underline: true,
+  },
+];
+
+/**
+ * Copy for the Shakespeare statue (the "Shakespeare Says" entry of data/projects.json). Lines are laid out in the
+ * text group of ShakespeareStatue.tsx, which sits beside the statue; x/z stay 0 and y runs top to bottom.
+ */
+export const SHAKESPEARE_LINES: HoloLineSpec[] = [
+  {
+    text: "Shakespeare Says",
+    size: 240,
+    family: SERIF,
+    italic: true,
+    weight: 700,
+    textWidth: 1.95,
+    x: 0,
+    y: 3.2,
+    z: 0,
+    color: CORE,
+    delay: 0,
+  },
+  {
+    text: "Shakespearean text generator",
+    size: 88,
+    family: SERIF,
+    italic: true,
+    weight: 500,
+    textWidth: 2.25,
+    x: 0,
+    y: 2.85,
+    z: 0,
+    color: GLOW,
+    delay: 0.06,
+  },
+  {
+    text: "GPT-2 fine-tuned on his works",
+    size: 108,
+    family: SERIF,
+    italic: true,
+    weight: 600,
+    textWidth: 2.2,
+    x: 0,
+    y: 2.5,
+    z: 0,
+    color: GLOW,
+    delay: 0.12,
+  },
+  {
+    text: "Quantized ONNX model, runs locally",
+    size: 92,
+    family: SERIF,
+    italic: true,
+    weight: 600,
+    textWidth: 2.3,
+    x: 0,
+    y: 2.15,
+    z: 0,
+    color: GLOW,
+    delay: 0.18,
+  },
+  {
+    text: "Next.js  ·  TypeScript  ·  GPT-2 / ONNX",
+    size: 84,
+    family: SERIF,
+    italic: true,
+    weight: 600,
+    textWidth: 2.3,
+    x: 0,
+    y: 1.8,
+    z: 0,
+    color: CORE,
+    delay: 0.24,
+  },
+  {
+    text: "github.com/AmirtterK/shakespear-says",
+    size: 68,
+    family: SERIF,
+    italic: true,
+    weight: 600,
+    textWidth: 2.2,
+    x: 0,
+    y: 1.45,
+    z: 0,
+    color: GLOW,
+    delay: 0.3,
+    link: "https://github.com/AmirtterK/shakespear-says",
     underline: true,
   },
 ];

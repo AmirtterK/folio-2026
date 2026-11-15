@@ -55,6 +55,19 @@ export const LINKEDIN_POS = {
 };
 
 /**
+ * Shakespeare statue (the "Shakespeare Says" project). He stands on the infield side of the barrier, a few steps west of
+ * the street lamp at about (-23.3, 21.6): the lamp one step on from the lamp beside the neural hologram (4.9, 34.8), in the
+ * direction away from the x = 37 lamp, toward the middle of the project area. The road is diagonal here, so his nearest
+ * back corner is ~0.3 off the barrier (7.7 from the road's centre line) and the far end of the bench stands a little
+ * clear of it. yaw = 0 keeps his front (+z) facing into the infield, which the inspect camera and the text offsets expect.
+ */
+export const SHAKESPEARE_POS = {
+  x: -30,
+  z: 16.45,
+  yaw: 0,
+};
+
+/**
  * Chess (reference): key prompt relative to hologram/text anchor.
  * Chess anchor (HoloText group): [1.4, 0, 1.0], key prompt: [1.65, 1.95, -1.2]
  * Offset = key - anchor = [0.25, 1.95, -2.2], distance ~= 2.951.

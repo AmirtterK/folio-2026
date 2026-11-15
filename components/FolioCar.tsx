@@ -28,6 +28,7 @@ import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { MutableRefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
+import { modelUrl } from "@/components/modelUrl";
 import type { ThreeElements } from "@react-three/fiber";
 import * as THREE from "three";
 import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
@@ -39,7 +40,7 @@ export type CarInput = { fwd: number; back: number; left: number; right: number;
 
 export type CarPose = { x: number; y: number; z: number; yaw: number; speed: number };
 
-export type CarModel = "toy" | "sf90" | "nissan" | "porsche" | "ferrari" | "corvette";
+export type CarModel = "toy" | "sf90" | "nissan" | "porsche" | "ferrari" | "corvette" | "clio";
 
 export type FolioCarProps = {
   /** Paint color. */
@@ -107,10 +108,10 @@ const WHEEL_X = 0.86;
 const WHEEL_Z = 1.2;
 
 // Preload only the default car for faster startup; other cars load on selection.
-useGLTF.preload("/models/ferrari_f599.glb", DRACO_DECODER);
+useGLTF.preload(modelUrl("/models/ferrari_f599.glb"), DRACO_DECODER);
 
 /* Ferrari SF90 (scripts/build-sf90.mjs): same wheelbase as the toy car, small F1 wheels, one centre exhaust. Credit: "Ferrari F1 2019" by vecarz, CC-BY-4.0. */
-const SF90_URL = "/models/sf90.glb";
+const SF90_URL = modelUrl("/models/sf90.glb");
 const SF90_SCALE = 1.5; // the F1 is long and low next to the R17, so it is shown 1.5x bigger than the 2.4 wheelbase build
 const SF90_WHEEL_R = 0.2016 * SF90_SCALE;
 const SF90_WHEEL_X = 0.523 * SF90_SCALE;
@@ -118,7 +119,7 @@ const SF90_EXHAUST = { x: 0, y: 0.36 * SF90_SCALE, z: -1.34 * SF90_SCALE }; // t
 const SF90_DOT = { y: 0.285, z: -1.64 };           // red dot light on the tip of the rear crash structure, centre line (unscaled: it sits inside the scaled group)
 
 /* Low-poly Sketchfab cars, normalised to the same 2.4 wheelbase as the R17. */
-const PORSCHE_URL = "/models/porsche_panamera.glb";
+const PORSCHE_URL = modelUrl("/models/porsche_panamera.glb");
 const PORSCHE_SCALE = 0.8245;
 const PORSCHE_WHEEL_R = 0.373 * PORSCHE_SCALE;
 const PORSCHE_WHEEL_X = 0.8845 * PORSCHE_SCALE;
@@ -126,7 +127,7 @@ const PORSCHE_Z_SHIFT = -0.0969;
 const PORSCHE_EXHAUST = { x: 0.5, y: 0.3, z: -2.05 }; // twin tips, left + right
 const PORSCHE_LIGHTS = { x: 0.4, y: 0.7, z: -2.0 };
 
-const FERRARI_URL = "/models/ferrari_f599.glb";
+const FERRARI_URL = modelUrl("/models/ferrari_f599.glb");
 const FERRARI_SCALE = 0.8737;
 const FERRARI_WHEEL_R = 0.3515 * FERRARI_SCALE;
 const FERRARI_WHEEL_X = 0.904 * FERRARI_SCALE;
@@ -134,7 +135,7 @@ const FERRARI_Z_SHIFT = -0.0607;
 const FERRARI_EXHAUST = { x: 0.6, y: 0.28, z: -2.02 }; // twin tips, left + right
 const FERRARI_LIGHTS = { x: 0.627, y: 0.73, z: -1.88 };
 
-const CORVETTE_URL = "/models/corvette_stingray.glb";
+const CORVETTE_URL = modelUrl("/models/corvette_stingray.glb");
 const CORVETTE_SCALE = 0.9153;
 const CORVETTE_WHEEL_R = 0.3735 * CORVETTE_SCALE;
 const CORVETTE_WHEEL_X = 0.807 * CORVETTE_SCALE;
@@ -143,7 +144,7 @@ const CORVETTE_EXHAUST = { x: 0.692, y: 0.443, z: -2.1, single: true }; // left-
 const CORVETTE_LIGHTS = { x: 0.59, y: 0.6, z: -2.17 };
 
 /* Nissan Silvia S15, normalised to the same 2.4 wheelbase. */
-const NISSAN_URL = "/models/nissan_silvia_s15.glb";
+const NISSAN_URL = modelUrl("/models/nissan_silvia_s15.glb");
 const NISSAN_SCALE = 0.4989;
 const NISSAN_WHEEL_R = 0.645 * NISSAN_SCALE;
 const NISSAN_WHEEL_X = 1.3325 * NISSAN_SCALE;
@@ -151,6 +152,15 @@ const NISSAN_Z_SHIFT = -0.0526;
 const NISSAN_Y_SHIFT = -0.049 * NISSAN_SCALE;
 const NISSAN_EXHAUST = { x: 0.405, y: 0.276, z: -2.08, single: true }; // left-side tip only
 const NISSAN_LIGHTS = { x: 0.55, y: 0.72, z: -2.0 };
+
+/* Renault Clio 5 (scripts/build-clio5.mjs, from Downloads/2020_renault_clio.glb): already built in FolioCar space (wheelbase 2.4,
+   front = +Z, ground at y = 0), white body, black tyres, Steer_FL/FR + Wheel_FL/FR/RL/RR nodes, so it needs no scale or shift.
+   All numbers below are measured from the built GLB (the script prints them). */
+const CLIO_URL = modelUrl("/models/renault_clio_5.glb");
+const CLIO_WHEEL_R = 0.2802;
+const CLIO_WHEEL_X = 0.6982;
+const CLIO_EXHAUST = { x: 0.45, y: 0.3, z: -1.78, single: true }; // left (+x) tailpipe: tip at z -1.762, x 0.285..0.614, y 0.24..0.36
+const CLIO_LIGHTS = { x: 0.53, y: 0.85, z: -1.66 }; // on the red tail lens surface: lens centroid (0.530, 0.846, -1.637), rear-most surface at z -1.665 there (the lens curves forward towards the side, z -1.71 at x 0.34, -1.51 at x 0.7)
 
 const LUGS = 28;
 const SPOKE_PAIRS = 5;
@@ -349,6 +359,16 @@ type Pipe = { x: number; y: number; z: number; single?: boolean };
 
 type CarConfig = { wheelR: number; trackX: number; exhaust: Pipe };
 
+/**
+ * Start loading a car's GLB from an event handler (the car picker), before the car is mounted.
+ * If the load only starts while the body component renders, drei's progress store updates mid-render
+ * and React warns that SceneSettleGate was updated while rendering the car body.
+ */
+export function preloadCarModel(model: CarModel) {
+  const url = { sf90: SF90_URL, porsche: PORSCHE_URL, ferrari: FERRARI_URL, corvette: CORVETTE_URL, nissan: NISSAN_URL, clio: CLIO_URL }[model as string];
+  if (url) useGLTF.preload(url, DRACO_DECODER);
+}
+
 function carConfig(model: CarModel): CarConfig {
   switch (model) {
     case "sf90":
@@ -361,6 +381,8 @@ function carConfig(model: CarModel): CarConfig {
       return { wheelR: CORVETTE_WHEEL_R, trackX: CORVETTE_WHEEL_X, exhaust: CORVETTE_EXHAUST };
     case "nissan":
       return { wheelR: NISSAN_WHEEL_R, trackX: NISSAN_WHEEL_X, exhaust: NISSAN_EXHAUST };
+    case "clio":
+      return { wheelR: CLIO_WHEEL_R, trackX: CLIO_WHEEL_X, exhaust: CLIO_EXHAUST };
     default:
       return { wheelR: WHEEL_R, trackX: WHEEL_X, exhaust: { x: EXHAUST_X, y: EXHAUST_Y, z: EXHAUST_Z } };
   }
@@ -789,6 +811,41 @@ function NissanBody({ spinGroups, steerPivots, cast }: WheelRig) {
   );
 }
 
+/** Loads the Clio GLB (wheel / steering nodes already named) and hands them to the physics. The body material becomes glossy white paint. */
+function ClioBody({ spinGroups, steerPivots, cast }: WheelRig) {
+  const gltf = useGLTF(CLIO_URL, DRACO_DECODER);
+  const root = useMemo(() => {
+    const r = gltf.scene.clone(true);
+    r.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      m.castShadow = cast;
+      const old = m.material as THREE.MeshStandardMaterial;
+      if (old.name === "body") {
+        // body paint only (windows, trim, lamps keep their own materials): glossy white with a clear coat
+        m.material = new THREE.MeshPhysicalMaterial({ color: old.color, roughness: 0.3, metalness: 0, clearcoat: 0.6, clearcoatRoughness: 0.08 });
+      } else if (old.name === "chrome" || old.name === "disk") {
+        // fully metallic surfaces look black without an environment map, so keep them only partly metallic: they read as bright silver
+        const mat = old.clone();
+        mat.color.set(old.name === "chrome" ? "#e4e4e8" : "#c4c4ca");
+        mat.metalness = 0.35;
+        mat.roughness = 0.3;
+        m.material = mat;
+      }
+    });
+    return r;
+  }, [gltf, cast]);
+
+  useLayoutEffect(() => {
+    const get = (n: string) => root.getObjectByName(n) as THREE.Group;
+    // same order as the toy car: 0 front +x, 1 front -x, 2 rear +x, 3 rear -x
+    spinGroups.current = [get("Wheel_FL"), get("Wheel_FR"), get("Wheel_RL"), get("Wheel_RR")];
+    steerPivots.current = [get("Steer_FL"), get("Steer_FR")];
+  }, [root, spinGroups, steerPivots]);
+
+  return <primitive object={root} />;
+}
+
 let redGlowTexCache: THREE.CanvasTexture | null = null;
 
 function redGlowTexture() {
@@ -844,6 +901,39 @@ function RearLights({ mats, x, y, z }: { mats: Mats; x: number; y: number; z: nu
   );
 }
 
+/** The Clio's reverse lights: two red glows on the tail lenses that are only visible while the car reverses (`level` fades 0..1). */
+function ClioReverseLights({ level, x, y, z }: { level: MutableRefObject<number>; x: number; y: number; z: number }) {
+  const group = useRef<THREE.Group>(null);
+  const halos = useRef<(THREE.Sprite | null)[]>([]);
+  const glow = useMemo(() => redGlowTexture(), []);
+  useFrame(() => {
+    const l = level.current;
+    const g = group.current;
+    if (!g) return;
+    g.visible = l > 0.02;
+    if (!g.visible) return;
+    for (const h of halos.current) {
+      if (!h) continue;
+      (h.material as THREE.SpriteMaterial).opacity = 0.9 * l;
+      h.scale.setScalar(0.16 + 0.1 * l);
+    }
+  });
+  return (
+    <group ref={group} visible={false}>
+      {[-x, x].map((px, i) => (
+        <group key={i}>
+          <mesh position={[px, y, z]}>
+            <sphereGeometry args={[0.035, 14, 10]} />
+            <meshBasicMaterial color="#ff3a2a" toneMapped={false} />
+          </mesh>
+          <sprite ref={(el) => { halos.current[i] = el; }} position={[px, y, z - 0.02]} scale={[0.2, 0.2, 1]}>
+            <spriteMaterial map={glow} transparent depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} opacity={0} />
+          </sprite>
+        </group>
+      ))}
+    </group>
+  );
+}
 /** One centre tail light for cars with a single central rear lamp. */
 function RearDot({ mats, y, z }: { mats: Mats; y: number; z: number }) {
   return <RearLight mats={mats} x={0} y={y} z={z} />;
@@ -876,6 +966,7 @@ export default function FolioCar({
   const toy = model === "toy";
   const sf90 = model === "sf90";
   const nissan = model === "nissan";
+  const clio = model === "clio";
   const porsche = model === "porsche";
   const ferrari = model === "ferrari";
   const corvette = model === "corvette";
@@ -896,6 +987,7 @@ export default function FolioCar({
   const keys = useRef<CarInput>({ fwd: 0, back: 0, left: 0, right: 0, brake: 0 });
   const sim = useRef({ speed: 0, steer: 0, pitch: 0, roll: 0 });
   const lightLevel = useRef(headlights ? 1 : 0);
+  const reverseLevel = useRef(0); // 0..1, rises while the car reverses (reverse pedal held or rolling backwards)
 
   // world driving (only used when `terrain` is given)
   const outerRef = useRef<THREE.Group>(null);
@@ -986,6 +1078,7 @@ export default function FolioCar({
     lightLevel.current += ((headlights ? 1 : 0) - lightLevel.current) * Math.min(1, dt * 9);
     mats.lamp.emissiveIntensity = 0.05 + 2.6 * lightLevel.current;
     mats.tail.emissiveIntensity = 0.6 + 0.35 * lightLevel.current + (k.brake || k.back ? 1.6 : 0);
+    reverseLevel.current += ((k.back > 0 || s.speed < -0.05 ? 1 : 0) - reverseLevel.current) * Math.min(1, dt * 14);
 
     const throttle = k.fwd - k.back;
     const target = throttle * maxSpeed;
@@ -1013,42 +1106,54 @@ export default function FolioCar({
       // move: bicycle steering, a bit less twitchy at speed, less bite on loose ground, almost none in the air
       const authority = w.air ? 0.15 : 0.55 + 0.45 * gripNow;
       const steerEff = (s.steer * authority) / (1 + Math.abs(s.speed) * 0.12);
-      w.yaw += ((s.speed * Math.tan(steerEff)) / (WHEEL_Z * 2)) * dt;
-      w.x += Math.sin(w.yaw) * s.speed * dt;
-      w.z += Math.cos(w.yaw) * s.speed * dt;
+      const yawRate = (s.speed * Math.tan(steerEff)) / (WHEEL_Z * 2);
 
-      // trees, rocks, bushes, signs & barriers: solid collision with elastic crash response
-      if (collide && !(w.air && w.y - w.gy > 1.8)) {
+      // Move in small sub-steps (at most ~0.3 units each) and test collisions after every one, so a slow frame or a
+      // fast car can never jump over a thin barrier or end up on the far side of an object.
+      const canCollide = !!collide && !(w.air && w.y - w.gy > 1.8);
+      const steps = canCollide ? Math.min(8, Math.max(1, Math.ceil((Math.abs(s.speed) * dt) / 0.3))) : 1;
+      const sdt = dt / steps;
+      for (let si = 0; si < steps; si++) {
+        w.yaw += yawRate * sdt;
+        w.x += Math.sin(w.yaw) * s.speed * sdt;
+        w.z += Math.cos(w.yaw) * s.speed * sdt;
+
+        if (!canCollide || !collide) continue;
+        // trees, rocks, bushes, signs & barriers: solid collision with a crash response
         const snCol = Math.sin(w.yaw), csCol = Math.cos(w.yaw);
-        // Multi-point chassis collision: front bumper, center, and rear bumper
-        const fX = w.x + snCol * 1.35 * carScale;
-        const fZ = w.z + csCol * 1.35 * carScale;
-        const rX = w.x - snCol * 1.35 * carScale;
-        const rZ = w.z - csCol * 1.35 * carScale;
+        let impacted = false;
+        // resolve up to 3 passes so that being pushed out of one thing doesn't push the car into the next
+        for (let pass = 0; pass < 3; pass++) {
+          // Multi-point chassis collision: front bumper, center, and rear bumper
+          const h1 = collide(w.x, w.z, 1.05 * carScale);
+          const h2 = collide(w.x + snCol * 1.35 * carScale, w.z + csCol * 1.35 * carScale, 0.95 * carScale);
+          const h3 = collide(w.x - snCol * 1.35 * carScale, w.z - csCol * 1.35 * carScale, 0.95 * carScale);
+          if (!h1 && !h2 && !h3) break;
 
-        const hitCenter = collide(w.x, w.z, 1.05 * carScale);
-        const hitFront = collide(fX, fZ, 0.95 * carScale);
-        const hitRear = collide(rX, rZ, 0.95 * carScale);
+          // use the deepest overlap as the push direction
+          let px = 0, pz = 0, best = 0;
+          for (const h of [h1, h2, h3]) {
+            if (!h) continue;
+            const l = Math.hypot(h[0], h[1]);
+            if (l > best) { best = l; px = h[0]; pz = h[1]; }
+          }
+          if (best < 1e-5) break;
+          const nx = px / best;
+          const nz = pz / best;
+          // push out fully plus a hair, so the next test starts clear of the surface instead of grazing it
+          w.x += px + nx * 0.02;
+          w.z += pz + nz * 0.02;
 
-        const hit = hitCenter || hitFront || hitRear;
-        if (hit) {
-          w.x += hit[0] * 1.15;
-          w.z += hit[1] * 1.15;
-
-          const pLen = Math.hypot(hit[0], hit[1]);
-          if (pLen > 0.001) {
-            const nx = hit[0] / pLen;
-            const nz = hit[1] / pLen;
-            const dot = (snCol * nx + csCol * nz) * s.speed;
-            if (dot < 0) {
-              // Moving into obstacle: rebound with realistic crash bounce
-              s.speed = -s.speed * 0.35;
-              w.comp = Math.min(0.28, w.comp + 0.14);
-            } else {
-              s.speed *= 0.3;
-            }
+          // only the part of the velocity that points into the obstacle is removed (a glancing scrape keeps its speed)
+          const hn = snCol * nx + csCol * nz; // heading . push direction, negative = driving into it
+          if (hn * s.speed < 0) {
+            const impact = Math.abs(hn * s.speed);
+            s.speed -= (1 + 0.3) * hn * hn * s.speed;
+            if (!impacted && impact > 2) w.comp = Math.min(0.28, w.comp + 0.04 * impact);
+            impacted = true;
           }
         }
+        if (impacted && Math.abs(s.speed) < 0.4) s.speed = 0;
       }
 
       // soft walls at the edge of the allowed area
@@ -1240,6 +1345,15 @@ export default function FolioCar({
               <NissanBody spinGroups={spinGroups} steerPivots={steerPivots} cast={driving} />
               <CarReady onReady={onReady} />
               <RearLights mats={mats} x={NISSAN_LIGHTS.x} y={NISSAN_LIGHTS.y} z={NISSAN_LIGHTS.z} />
+            </Suspense>
+          </>
+        )}
+        {clio && (
+          <>
+            <Suspense fallback={null}>
+              <ClioBody spinGroups={spinGroups} steerPivots={steerPivots} cast={driving} />
+              <CarReady onReady={onReady} />
+              <ClioReverseLights level={reverseLevel} x={CLIO_LIGHTS.x} y={CLIO_LIGHTS.y} z={CLIO_LIGHTS.z} />
             </Suspense>
           </>
         )}

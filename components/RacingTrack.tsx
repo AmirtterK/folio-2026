@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useRef } from "react";
 import type { MutableRefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
+import { modelUrl } from "@/components/modelUrl";
 import * as THREE from "three";
 import RAPIER from "@dimforge/rapier3d-compat";
 import type { CarPose } from "@/components/FolioCar";
@@ -402,8 +403,8 @@ type Lamp = { x: number; z: number; rot: number };
 const LAMP_HEAD = { out: 2.2, y: 5.4 }; // approx light head position in lamp local space for GLB street light model
 const LAMP_LIGHTS = 4; // real spotlights in the pool (constant count, so no shader recompiles)
 const LAMP_FADE_NEAR = 16; // full strength inside this distance from the car
-const LAMP_FADE_FAR = 48; // completely off beyond this distance
-const LAMP_INTENSITY = 750;
+const LAMP_FADE_FAR = 64; // completely off beyond this distance
+const LAMP_INTENSITY = 900;
 
 /**
  * Real light from the street lamps. A small pool of spotlights is moved onto the lamps nearest the car every
@@ -485,11 +486,11 @@ function LampLights({ lamps, pose }: { lamps: Lamp[]; pose?: MutableRefObject<Ca
             ref={(el) => {
               lights.current[k] = el;
             }}
-            color="#ffc878"
+            color="#ffe4bd"
             intensity={0}
             angle={1.2}
             penumbra={1}
-            distance={55}
+            distance={72}
             decay={2}
           />
           <object3D
@@ -510,7 +511,7 @@ function TrackLamps({
   geometry: THREE.BufferGeometry;
   pose?: MutableRefObject<CarPose>;
 }) {
-  const { scene } = useGLTF("/models/examples/simple_collection_of_low_poly_street_lights.glb");
+  const { scene } = useGLTF(modelUrl("/models/examples/simple_collection_of_low_poly_street_lights.glb"));
   const glow = useMemo(() => createGlowTexture(), []);
   const { world } = usePhysics();
 
@@ -741,7 +742,7 @@ function PushableTire({
 }
 
 function MiddleTires() {
-  const { scene } = useGLTF("/models/examples/low_poly_tire_fixed.glb");
+  const { scene } = useGLTF(modelUrl("/models/examples/low_poly_tire_fixed.glb"));
   const tireModel = useMemo(() => {
     const root = scene.clone(true);
     root.traverse((o) => {
@@ -1124,6 +1125,6 @@ export function FolioTopDownCam({
   return null;
 }
 
-useGLTF.preload("/models/examples/simple_collection_of_low_poly_street_lights.glb");
-useGLTF.preload("/models/examples/low_poly_tire_fixed.glb");
+useGLTF.preload(modelUrl("/models/examples/simple_collection_of_low_poly_street_lights.glb"));
+useGLTF.preload(modelUrl("/models/examples/low_poly_tire_fixed.glb"));
 

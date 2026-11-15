@@ -1,11 +1,14 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 
-const HOLO_RGB = "94,200,255";
-const CORE = "#eefdff";
+const HOLO_RGB = "40,150,255";
+const CORE = "#9fd4ff";
+
+/** Every holographic text block is drawn this much bigger than its spec (sizes and spacing scale together). */
+const TEXT_SCALE = 1.38;
 
 export type HoloLineSpec = {
   text: string;
@@ -42,21 +45,29 @@ function setSpacing(ctx: CanvasRenderingContext2D, px: number) {
 
 /** Draw one line of glowing holographic type onto a transparent canvas and fit it to a world width. */
 function createHoloTextTexture(spec: HoloLineSpec) {
-  // Render at higher internal resolution for sharper text, keep world plane size the same.
-  const res = 2;
-  const size = spec.size * res;
-  const spacing = (spec.spacing ?? 0) * res;
-  const font = `${spec.italic ? "italic " : ""}${spec.weight} ${size}px ${spec.family}`;
+  // Render at high internal resolution for crisp text (world plane size stays the same). Drop the resolution only if a
+  // long line would not fit in a 4096px texture.
   const probe = document.createElement("canvas").getContext("2d")!;
-  probe.font = font;
-  setSpacing(probe, spacing);
-  const textW = Math.max(1, probe.measureText(spec.text).width);
+  let res = 4;
+  let size = spec.size * res;
+  let spacing = (spec.spacing ?? 0) * res;
+  let font = "";
+  let textW = 1;
+  let padX = 0;
+  for (; res >= 1; res--) {
+    size = spec.size * res;
+    spacing = (spec.spacing ?? 0) * res;
+    font = `${spec.italic ? "italic " : ""}${spec.weight} ${size}px ${spec.family}`;
+    probe.font = font;
+    setSpacing(probe, spacing);
+    textW = Math.max(1, probe.measureText(spec.text).width);
+    padX = Math.ceil(size * 0.85);
+    if (textW + padX * 2 <= 4096) break;
+  }
 
-  const padX = Math.ceil(size * 0.85);
   const padY = Math.ceil(size * 0.85);
   const w = Math.ceil(textW + padX * 2);
   const h = Math.ceil(size * 1.35 + padY * 2);
-
   const canvas = document.createElement("canvas");
   canvas.width = w;
   canvas.height = h;
@@ -68,22 +79,26 @@ function createHoloTextTexture(spec: HoloLineSpec) {
   const cx = w / 2;
   const cy = h / 2;
 
-  // Softer glow for clearer, less radiant text
+  // Tight blue glow (small blur keeps the edges sharp), then a saturated blue body, a thin crisp outline and a
+  // light-blue core instead of near-white, so the text reads blue rather than washed out.
+  ctx.lineJoin = "round";
   ctx.fillStyle = spec.color;
-  ctx.shadowColor = `rgba(${HOLO_RGB},0.45)`;
-  ctx.shadowBlur = size * 0.18;
+  ctx.shadowColor = `rgba(${HOLO_RGB},0.75)`;
+  ctx.shadowBlur = size * 0.1;
   ctx.fillText(spec.text, cx, cy);
 
   ctx.shadowBlur = 0;
+  ctx.strokeStyle = `rgba(${HOLO_RGB},1)`;
+  ctx.lineWidth = Math.max(1, size * 0.035);
+  ctx.strokeText(spec.text, cx, cy);
+
   ctx.fillStyle = CORE;
   ctx.fillText(spec.text, cx, cy);
 
-  // Subtle colored pass for tint without bloom
   ctx.fillStyle = spec.color;
-  ctx.globalAlpha = 0.35;
+  ctx.globalAlpha = 0.6;
   ctx.fillText(spec.text, cx, cy);
   ctx.globalAlpha = 1;
-
   if (spec.underline) {
     ctx.strokeStyle = spec.color;
     ctx.lineWidth = Math.max(2, size * 0.03);
@@ -187,7 +202,7 @@ export default function HoloText({ lines, active, night = true, mobile = false, 
   });
 
   return (
-    <group>
+    <group scale={TEXT_SCALE}>
       {assets.map((line, i) => (
         <group
           key={line.spec.text}

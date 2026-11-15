@@ -24,11 +24,13 @@ import { setCircleColliders, clearCircleColliders } from "@/components/trackColl
 
 /**
  * Where the example models stand in the infield/center.
- * The robot arm used to stand right on top of the diploma (8, 40); it is now out in the open, 20 units east of it.
+ * The robot arm used to stand right on top of the diploma (8, 40), then (50, 42.7); it now stands in the middle of the
+ * project area: about the centre of the knight, neural network, printer, mailbox, LinkedIn, diploma and Shakespeare
+ * landmarks, at least ~12 units from each of them and ~21 from the road.
  */
 export const EXAMPLE_POSITIONS = {
   coffeemat: [18, 0, 42] as [number, number, number],
-  robot: [28, 0, 40] as [number, number, number],
+  robot: [-43, 0, 20] as [number, number, number],
 };
 
 /* ------------------------------------------------------------------ */
